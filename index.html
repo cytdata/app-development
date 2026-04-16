@@ -1,0 +1,3913 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>日記 · Nikki</title>
+<!-- Privacy-first: localStorage only. Zero server collection. -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600&family=Noto+Sans+TC:wght@300;400;500&display=swap');
+
+/* ══ THEME TOKENS ══ */
+:root {
+  --bg:#ede8df; --bg2:#f5ede3; --bg3:#e8e1d6;
+  --border:#e8e0d4; --muted:#c4b8a8; --subtle:#8b7355;
+  --strong:#3d2f1f; --ink:#2c2018;
+  --shadow:rgba(61,47,31,0.10); --shadow2:rgba(61,47,31,0.18);
+  --noise:0.4;
+  --cal-accent:#d4857a; --cal-accent-soft:rgba(212,133,122,0.18);
+}
+[data-theme="light"]{
+  --bg:#fdfbf8; --bg2:#f5f2ee; --bg3:#ece8e2;
+  --border:#e2e2e2; --muted:#999; --subtle:#555;
+  --strong:#1a1a1a; --ink:#1a1a1a;
+  --shadow:rgba(0,0,0,0.07); --shadow2:rgba(0,0,0,0.14); --noise:0.1;
+}
+[data-theme="dark"]{
+  --bg:#141414; --bg2:#1c1c1c; --bg3:#252525;
+  --border:#2e2e2e; --muted:#555; --subtle:#999;
+  --strong:#e8e4de; --ink:#dedad4;
+  --shadow:rgba(0,0,0,0.35); --shadow2:rgba(0,0,0,0.55); --noise:0.06;
+  --cal-accent-soft:rgba(212,133,122,0.22);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html, body{
+  height:100%; overflow:hidden;
+}
+body{
+  background:var(--bg); font-family:'Noto Serif TC',serif;
+  color:var(--ink);
+  max-width:430px; margin:0 auto; transition:background .3s,color .3s;
+  /* App shell: screens stack above, tab-bar sits below */
+  display:flex; flex-direction:column;
+}
+body::before{
+  content:''; position:fixed; inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events:none; z-index:9999; opacity:var(--noise); transition:opacity .3s;
+}
+/* ── Screen layer: fills all body space above tab-bar ── */
+/* All screens are hidden by default; only .active is shown */
+.screen{display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.screen.active{display:flex}
+/* calScreen overrides: same flex:1 column, zero extra padding */
+#calScreen{
+  background:var(--bg);
+  display:none;
+  flex-direction:column;
+  flex:1;
+  min-height:0;
+  overflow:hidden;
+}
+#calScreen.active{
+  display:flex;
+}
+
+/* ══ TAB BAR ══ */
+/* ── TAB BAR: normal-flow footer in body flex column ── */
+/* No position:fixed needed — body is the flex column, tab-bar sits at bottom */
+.tab-bar{
+  flex-shrink:0;
+  width:100%; max-width:430px;
+  background:var(--bg2); border-top:1px solid var(--border);
+  display:flex; z-index:600;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.tab-item{
+  flex:1; padding:14px 4px 12px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  cursor:pointer; border:none; background:transparent; transition:all .18s;
+}
+.tab-item .tab-icon{font-size:20px;line-height:1}
+.tab-item .tab-label{font-family:'Noto Sans TC',sans-serif;font-size:9px;color:var(--muted);letter-spacing:.5px;transition:color .18s}
+.tab-item.active .tab-label{color:var(--cal-accent)}
+.tab-item.active .tab-icon{filter:saturate(1.5)}
+
+/* ══ CALENDAR SCREEN ══ */
+/* Every static piece above the scrollable area must NEVER compress.
+   All are flex-shrink:0; overflow:hidden on their wrappers prevents
+   content growth from stealing height from .feed-section.           */
+.top-bar{padding:48px 16px 0;display:flex;flex-direction:column;gap:10px;flex-shrink:0}
+.cal-switcher{display:flex;align-items:center;gap:6px}
+.cal-tab{
+  flex:1; padding:7px 10px; border-radius:22px;
+  border:1.5px solid var(--border); background:transparent;
+  font-family:'Noto Sans TC',sans-serif; font-size:12px; font-weight:400;
+  color:var(--muted); cursor:pointer; transition:all .25s cubic-bezier(.4,0,.2,1);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;
+}
+.cal-tab.active{background:var(--strong);color:var(--bg);border-color:var(--strong);font-weight:500;box-shadow:0 2px 10px var(--shadow2)}
+.cal-tab-add{
+  width:32px;height:32px;flex:none;border-radius:50%;
+  border:1.5px dashed var(--muted);background:transparent;
+  color:var(--muted);font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .18s;
+}
+.cal-tab-add:hover{border-color:var(--subtle);color:var(--subtle)}
+.cal-tab-add.hidden{opacity:0;pointer-events:none}
+
+.cal-header{padding:10px 16px 6px;display:flex;align-items:flex-end;justify-content:space-between;flex-shrink:0}
+.cal-year-label{font-family:'Noto Sans TC',sans-serif;font-size:10px;font-weight:300;color:var(--muted);letter-spacing:4px;margin-bottom:1px}
+.cal-month-name{font-family:'Noto Serif TC',serif;font-size:34px;font-weight:600;color:var(--strong);line-height:1}
+.cal-controls{display:flex;align-items:center;gap:6px;padding-bottom:3px}
+.view-toggle{display:flex;background:var(--bg3);border-radius:14px;padding:3px;gap:2px}
+.view-btn{
+  padding:3px 9px;border-radius:10px;border:none;
+  background:transparent;font-family:'Noto Sans TC',sans-serif;
+  font-size:11px;color:var(--muted);cursor:pointer;transition:all .18s;
+}
+.view-btn.active{background:var(--strong);color:var(--bg)}
+.nav-btn{
+  width:30px;height:30px;border-radius:50%;
+  border:1px solid var(--border);background:var(--bg2);
+  color:var(--subtle);font-size:14px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .18s;
+}
+.nav-btn:hover{background:var(--subtle);color:var(--bg);border-color:var(--subtle)}
+.nav-btn.hide{opacity:0;pointer-events:none}
+
+.weekday-row{display:grid;grid-template-columns:repeat(7,1fr);padding:0 10px;margin-bottom:2px;flex-shrink:0}
+.weekday-label{text-align:center;font-size:10px;letter-spacing:1px;color:var(--muted);font-family:'Noto Sans TC',sans-serif;font-weight:300;padding:3px 0}
+
+/* ── Calendar canvas wrapper (holds grid + free stickers) ──
+   flex-shrink:0 = never compress; overflow:hidden = grid sealed inside.
+   The wrapper has no intrinsic height — it is sized by its grid children,
+   which are locked to aspect-ratio:1 per cell, so total height is stable. */
+.cal-canvas-wrap{
+  position:relative;
+  padding:0 10px 8px;
+  flex-shrink:0;
+  overflow:hidden;
+  min-height:0;
+}
+.cal-grid{
+  display:grid;grid-template-columns:repeat(7,1fr);gap:3px;
+}
+.day-cell{
+  aspect-ratio:1;border-radius:9px;overflow:hidden;cursor:pointer;
+  position:relative;background:var(--bg2);border:1px solid var(--border);
+  transition:transform .18s,box-shadow .18s;animation:fadeUp .28s ease both;
+}
+.day-cell:hover{transform:scale(1.07);box-shadow:0 5px 14px var(--shadow);z-index:2}
+.day-cell.empty{background:transparent;border-color:transparent;cursor:default}
+.day-cell.empty:hover{transform:none;box-shadow:none}
+.day-cell.today{border:2px solid var(--cal-accent);box-shadow:0 0 0 2px var(--cal-accent-soft)}
+.day-cell.multi-photo::after{
+  content:''; position:absolute; bottom:4px; right:4px;
+  width:8px; height:8px; border-radius:50%;
+  background:var(--cal-accent); border:1.5px solid var(--bg);
+  z-index:2;
+}
+.day-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.9}
+.day-num{
+  position:absolute;top:4px;left:5px;
+  font-family:'Noto Sans TC',sans-serif;font-size:11px;font-weight:500;
+  color:var(--subtle);line-height:1;z-index:1;
+}
+.day-cell.has-photo .day-num{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5);background:rgba(0,0,0,.22);border-radius:4px;padding:2px 3px}
+.day-cell.today .day-num{color:#fff;background:var(--cal-accent);border-radius:4px;padding:2px 4px}
+
+/* FREE-FLOATING calendar-level stickers */
+.cal-sticker-layer{
+  position:absolute; inset:0;
+  pointer-events:none; z-index:20;
+}
+.cal-sticker-layer.editable{pointer-events:auto}
+
+/* toggle button to enter/exit canvas-sticker-edit mode */
+.cal-canvas-toggle{
+  display:flex;align-items:center;gap:4px;
+  padding:3px 10px; border-radius:12px;
+  border:1px solid var(--border); background:var(--bg2);
+  font-family:'Noto Sans TC',sans-serif;font-size:10px;
+  color:var(--muted);cursor:pointer;transition:all .18s;
+}
+.cal-canvas-toggle.on{background:var(--cal-accent);color:#fff;border-color:var(--cal-accent)}
+
+/* ── YEAR VIEW ── */
+/* #yearView is the scroll viewport; .year-grid is the inner grid */
+#yearView{
+  flex:1;
+  overflow-y:auto;
+  min-height:0;
+  -webkit-overflow-scrolling:touch;
+}
+.year-view{
+  padding:0 10px calc(80px + env(safe-area-inset-bottom,0px)) 10px;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+}
+.month-mini{cursor:pointer;border-radius:12px;border:1px solid var(--border);background:var(--bg2);padding:8px 6px;transition:all .18s;animation:fadeUp .3s ease both}
+.month-mini:hover{background:var(--bg3);box-shadow:0 3px 12px var(--shadow);transform:translateY(-2px)}
+.month-mini.current-month{border:2px solid var(--cal-accent);box-shadow:0 0 0 2px var(--cal-accent-soft)}
+.month-mini-name{font-family:'Noto Serif TC',serif;font-size:12px;font-weight:500;color:var(--strong);text-align:center;margin-bottom:5px}
+.month-mini-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
+.mini-cell{
+  aspect-ratio:1;border-radius:2px;
+  background:var(--bg3);
+  overflow:hidden;position:relative;
+}
+.mini-cell.today-cell{
+  outline:1.5px solid var(--cal-accent);
+  outline-offset:-1px;
+  z-index:1;
+}
+.mini-cell.empty-cell{background:transparent}
+.mini-cell-img{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;display:block;border-radius:2px;
+}
+
+/* ── FEED ── */
+/* feed-section: the ONLY flex-growing child in #calScreen.
+   min-height:160px guarantees it always has visible space even on small screens.
+   flex:1 lets it take all remaining height; overflow:hidden clips the box,
+   real scrolling lives on .feed-list inside.                               */
+.feed-section{
+  flex:1;
+  min-height:160px;          /* always visible floor, even on compact screens */
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.feed-header{padding:10px 14px 7px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0}
+.feed-title{font-family:'Noto Serif TC',serif;font-size:12px;font-weight:500;color:var(--subtle);letter-spacing:1px}
+.sort-toggle{display:flex;gap:2px;background:var(--bg3);border-radius:12px;padding:2px}
+.sort-btn{padding:3px 9px;border-radius:9px;border:none;background:transparent;font-family:'Noto Sans TC',sans-serif;font-size:10px;color:var(--muted);cursor:pointer;transition:all .18s}
+.sort-btn.active{background:var(--strong);color:var(--bg)}
+/* feed-list: ONLY scrollable region on calScreen.
+   flex:1 + min-height:0 fills leftover space inside feed-section.
+   Simple 12px bottom padding — no calc needed, tab-bar is outside this layout. */
+.feed-list{
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  padding:7px 14px 24px;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  flex:1;
+  min-height:0;
+  box-sizing:border-box;
+}
+.feed-list::-webkit-scrollbar{width:3px}
+.feed-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* ── Fixed-height feed card ──
+   Every row is exactly 58px tall regardless of content.
+   Two lines (date + note) always rendered; overflow is clipped.   */
+.feed-swipe-wrap{
+  position:relative;
+  overflow:hidden;
+  border-radius:10px;
+  height:58px;          /* fixed — never grows or shrinks */
+  flex-shrink:0;
+  animation:fadeUp .25s ease both;
+}
+.feed-item{
+  display:flex;gap:9px;align-items:center;  /* centre-align for fixed height */
+  height:58px;                              /* match wrapper */
+  padding:0 9px;
+  border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);transition:background .16s;
+  overflow:hidden;
+}
+.feed-item:hover{background:var(--bg3)}
+
+/* ── SWIPE-TO-DELETE wrapper ── */
+.feed-swipe-wrap .feed-item{
+  position:relative;z-index:1;
+  transform:translateX(0);
+  transition:transform .22s cubic-bezier(.4,0,.2,1);
+  border-radius:10px;margin:0;
+  will-change:transform;
+  cursor:pointer;
+}
+.feed-swipe-wrap.swiped .feed-item{transform:translateX(-80px)}
+.feed-delete-btn{
+  position:absolute;right:0;top:0;bottom:0;
+  width:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:#e74c3c;color:#fff;
+  font-family:'Noto Sans TC',sans-serif;font-size:11px;font-weight:500;
+  cursor:pointer;border-radius:0 10px 10px 0;
+  transition:background .15s,width .2s;z-index:0;gap:3px;
+}
+.feed-delete-btn:hover{background:#c0392b}
+.feed-delete-btn .del-icon{font-size:17px;line-height:1}
+/* collapse-out animation on delete */
+@keyframes feedCollapse{
+  0%  {max-height:58px;opacity:1;margin-bottom:0}
+  40% {opacity:0;transform:translateX(-100%)}
+  100%{max-height:0;opacity:0;margin-bottom:-7px}
+}
+.feed-swipe-wrap.deleting{
+  animation:feedCollapse .32s ease forwards;
+  pointer-events:none;overflow:hidden;
+}
+
+/* ── QUICK-ADD + BUTTON ── */
+.feed-quick-add{
+  width:26px;height:26px;border-radius:50%;
+  border:1.5px solid var(--border);background:var(--bg2);
+  color:var(--subtle);font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .18s;flex-shrink:0;line-height:1;
+}
+.feed-quick-add:hover{background:var(--cal-accent);color:#fff;border-color:var(--cal-accent)}
+.feed-thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)}
+.feed-thumb-empty{width:40px;height:40px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px}
+/* meta: two lines, vertically centred inside fixed 58px row */
+.feed-meta{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2px;overflow:hidden}
+.feed-date{font-family:'Noto Sans TC',sans-serif;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-note{font-family:'Noto Serif TC',serif;font-size:12px;font-weight:300;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* placeholder when no note exists — keeps the two-line height consistent */
+.feed-note-empty{font-family:'Noto Sans TC',sans-serif;font-size:11px;color:var(--muted);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-empty{text-align:center;padding:18px;font-family:'Noto Sans TC',sans-serif;font-size:12px;color:var(--muted)}
+
+/* ══ ENTRY SCREEN ══ */
+/* entryScreen is a full-viewport page that replaces calScreen entirely */
+#entryScreen{
+  background:var(--bg2);
+  flex:1;
+  min-height:0;
+  overflow:hidden;
+  padding-bottom:0;
+  display:none;
+  flex-direction:column;
+}
+#entryScreen.active{
+  display:flex;
+}
+.entry-header{
+  padding:48px 16px 12px;display:flex;align-items:center;gap:12px;
+  border-bottom:1px solid var(--border);background:var(--bg2);
+  flex-shrink:0;
+}
+.back-btn{
+  width:32px;height:32px;border-radius:50%;
+  border:1px solid var(--border);background:transparent;
+  color:var(--subtle);font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .16s;flex-shrink:0;
+}
+.back-btn:hover{background:var(--bg3)}
+.entry-date-display{flex:1}
+.entry-date-num{font-family:'Noto Serif TC',serif;font-size:32px;font-weight:600;color:var(--strong);line-height:1}
+.entry-date-sub{font-family:'Noto Sans TC',sans-serif;font-size:11px;font-weight:300;color:var(--muted);letter-spacing:1px;margin-top:2px}
+.entry-cal-badge{font-family:'Noto Sans TC',sans-serif;font-size:10px;padding:2px 8px;border-radius:10px;background:var(--cal-accent);color:#fff;margin-top:3px;display:inline-block}
+.save-btn{padding:7px 15px;border-radius:16px;background:var(--strong);color:var(--bg);border:none;font-family:'Noto Sans TC',sans-serif;font-size:12px;cursor:pointer;transition:all .16s}
+.save-btn:hover{opacity:.85}
+.entry-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;display:flex;flex-direction:column;gap:12px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+
+/* ── PHOTO CAROUSEL ── */
+.photo-carousel-wrap{
+  position:relative;
+  border-radius:16px;overflow:hidden;
+  background:var(--bg3);
+  border:1.5px solid var(--border);
+  user-select:none;
+}
+.photo-carousel-wrap.empty-state{border-style:dashed;border-color:var(--muted)}
+
+/* Slides container */
+.carousel-track{
+  display:flex;
+  transition:transform .32s cubic-bezier(.4,0,.2,1);
+  will-change:transform;
+}
+.carousel-slide{
+  flex-shrink:0;width:100%;
+  position:relative;
+}
+.slide-img{
+  width:100%;max-height:300px;object-fit:cover;display:block;
+}
+
+/* Carousel empty state */
+.carousel-empty{
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  color:var(--muted);cursor:pointer;padding:40px 24px;
+}
+.carousel-empty .icon{font-size:28px}
+.carousel-empty span{font-family:'Noto Sans TC',sans-serif;font-size:12px;letter-spacing:1px}
+
+/* Carousel nav dots + arrows */
+.carousel-dots{
+  position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+  display:flex;gap:5px;z-index:8;
+}
+.c-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:rgba(255,255,255,.5);transition:all .2s;
+}
+.c-dot.active{background:#fff;width:14px;border-radius:3px}
+
+.carousel-arrow{
+  position:absolute;top:50%;transform:translateY(-50%);
+  width:28px;height:28px;border-radius:50%;
+  background:rgba(0,0,0,.3);color:#fff;
+  border:none;font-size:14px;cursor:pointer;z-index:8;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s;
+}
+.carousel-arrow:hover{background:rgba(0,0,0,.55)}
+.carousel-arrow.left{left:8px}
+.carousel-arrow.right{right:8px}
+
+/* ── FAVORITE HEART BUTTON ── */
+.fav-btn{
+  position:absolute;bottom:10px;right:12px;
+  width:34px;height:34px;border-radius:50%;
+  background:rgba(0,0,0,.28);border:none;
+  color:#fff;font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  z-index:9;transition:background .15s;
+  backdrop-filter:blur(4px);
+}
+.fav-btn:hover{background:rgba(0,0,0,.5)}
+.fav-btn.fav-on{background:rgba(212,133,122,.75);color:#fff}
+
+/* Heart bounce animation */
+@keyframes heartBeat{
+  0%  {transform:scale(1)}
+  30% {transform:scale(1.5)}
+  60% {transform:scale(.9)}
+  80% {transform:scale(1.15)}
+  100%{transform:scale(1)}
+}
+.fav-btn.beat .fav-icon{animation:heartBeat .45s ease}
+
+/* photo count badge */
+.photo-count-badge{
+  position:absolute;top:10px;right:12px;
+  background:rgba(0,0,0,.35);color:#fff;
+  font-family:'Noto Sans TC',sans-serif;font-size:10px;
+  padding:2px 7px;border-radius:10px;z-index:8;
+  backdrop-filter:blur(4px);
+}
+
+/* Photo strip (thumbnails below carousel) */
+.photo-strip{display:flex;gap:6px;padding:8px 12px;background:var(--bg2);overflow-x:auto;scrollbar-width:none}
+.photo-strip::-webkit-scrollbar{display:none}
+.strip-thumb{
+  width:48px;height:48px;border-radius:8px;object-fit:cover;
+  flex-shrink:0;cursor:pointer;border:2px solid transparent;
+  transition:all .18s;position:relative;
+}
+.strip-thumb.active-thumb{border-color:var(--cal-accent)}
+.strip-thumb-add{
+  width:48px;height:48px;border-radius:8px;
+  border:1.5px dashed var(--muted);background:transparent;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;color:var(--muted);cursor:pointer;flex-shrink:0;
+  transition:all .18s;
+}
+.strip-thumb-add:hover{border-color:var(--cal-accent);color:var(--cal-accent)}
+/* fav heart overlay on thumbnail */
+.strip-fav{
+  position:absolute;bottom:2px;right:2px;
+  font-size:10px;line-height:1;
+}
+
+/* ── PHOTO COUNT LABEL (below strip, right-aligned) ── */
+.photo-count-label{
+  font-family:'Noto Sans TC',sans-serif;
+  font-size:10px;font-weight:300;
+  color:var(--muted);letter-spacing:.5px;
+  text-align:right;padding:2px 14px 0;
+}
+.photo-count-label span{color:var(--subtle);font-weight:500}
+
+/* hide + button when at limit */
+.strip-thumb-add.hidden{display:none}
+
+/* ── PHOTO DELETE BUTTON on strip thumbnail ── */
+.strip-del{
+  position:absolute;top:-6px;right:-6px;
+  width:18px;height:18px;border-radius:50%;
+  background:#e74c3c;color:#fff;
+  font-size:10px;font-weight:700;line-height:18px;text-align:center;
+  cursor:pointer;border:2px solid var(--bg2);
+  z-index:20;transition:transform .15s,background .15s;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);
+}
+.strip-del:hover{transform:scale(1.2);background:#c0392b}
+
+/* ── CANVAS STICKER layer on calendar (calModule) ── */
+/* reused .ps classes + new .cal-ps for calendar-placed stickers */
+.ps,.cal-ps{
+  position:absolute;cursor:grab;user-select:none;
+  /* transform-origin must be top-left to match left/top coordinate system */
+  transform-origin:top left;touch-action:none;will-change:transform;
+  pointer-events:auto;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+}
+.ps:active,.cal-ps:active{cursor:grabbing}
+.ps.ps-selected,.cal-ps.cal-ps-selected{outline:2px dashed var(--cal-accent);outline-offset:3px;border-radius:6px}
+/* Emoji stickers: fixed 44×44 box so transform-origin=top-left is stable */
+.ps.ps-emoji,.cal-ps.cal-ps-emoji{font-size:32px;width:44px;height:44px;overflow:visible}
+/* Photo stickers: container matches image size */
+.ps.ps-photo,.cal-ps.cal-ps-photo{width:80px;height:80px}
+.ps.ps-photo img,.cal-ps.cal-ps-photo img{
+  width:80px;height:80px;object-fit:cover;
+  border-radius:50%;border:2px solid var(--bg2);
+  box-shadow:0 4px 12px var(--shadow2);pointer-events:none;
+}
+.ps.ps-photo.rect img,.cal-ps.cal-ps-photo.rect img{border-radius:12px}
+.ps-delete,.cal-ps-delete{
+  position:absolute;top:-10px;right:-10px;
+  width:20px;height:20px;border-radius:50%;
+  background:#e74c3c;color:#fff;font-size:11px;
+  display:none;align-items:center;justify-content:center;
+  cursor:pointer;z-index:10;border:1.5px solid #fff;font-family:sans-serif;
+}
+.ps.ps-selected .ps-delete{display:flex}
+.cal-ps.cal-ps-selected .cal-ps-delete{display:flex}
+
+/* Canvas toolbar */
+.canvas-toolbar{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.ctool-btn{
+  padding:5px 11px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--subtle);
+  font-family:'Noto Sans TC',sans-serif;font-size:11px;cursor:pointer;
+  transition:all .15s;display:flex;align-items:center;gap:4px;
+}
+.ctool-btn:hover{background:var(--bg3);border-color:var(--muted)}
+.ctool-btn.danger{color:#e74c3c}
+
+.toolbar-label{font-family:'Noto Sans TC',sans-serif;font-size:10px;font-weight:400;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
+.sticker-strip{display:flex;gap:5px;overflow-x:auto;padding:2px 0;scrollbar-width:none}
+.sticker-strip::-webkit-scrollbar{display:none}
+.sticker-btn{
+  flex-shrink:0;width:42px;height:42px;border-radius:11px;
+  border:1px solid var(--border);background:var(--bg);
+  font-size:19px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.sticker-btn:hover{background:var(--bg3);transform:scale(1.12) rotate(5deg)}
+.sticker-btn.custom-sticker img{width:28px;height:28px;object-fit:cover;border-radius:50%;pointer-events:none}
+.sticker-btn.custom-sticker.rect img{border-radius:6px}
+
+.note-area{position:relative}
+.note-input{
+  width:100%;min-height:86px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:11px;
+  padding:12px;font-size:15px;color:var(--ink);resize:none;outline:none;
+  transition:border-color .18s;line-height:1.8;
+}
+.note-input:focus{border-color:var(--muted)}
+.note-input.f1{font-family:'Noto Serif TC',serif;font-weight:300}
+.note-input.f2{font-family:'Noto Sans TC',sans-serif;font-weight:400}
+.note-input.f3{font-family:'Noto Serif TC',serif;font-weight:500}
+.note-input::placeholder{color:var(--muted)}
+
+.bottom-nav{padding:9px 14px calc(10px + env(safe-area-inset-bottom,0px));background:var(--bg2);border-top:1px solid var(--border);display:flex;gap:7px;flex-shrink:0}
+.nav-action{flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--subtle);font-family:'Noto Sans TC',sans-serif;font-size:11px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:3px}
+.nav-action:hover{background:var(--bg3);border-color:var(--muted)}
+.nav-action.primary{background:var(--strong);color:var(--bg);border-color:var(--strong)}
+.nav-action.primary:hover{opacity:.85}
+
+#photoInput,#stickerPhotoInput{display:none}
+
+/* ══ STICKER CREATOR ══ */
+#stickerScreen{background:var(--bg)}
+.screen-header{padding:52px 16px 14px;border-bottom:1px solid var(--border);background:var(--bg2)}
+.screen-header h1{font-family:'Noto Serif TC',serif;font-size:24px;font-weight:600;color:var(--strong);margin-bottom:2px}
+.screen-header p{font-family:'Noto Sans TC',sans-serif;font-size:12px;color:var(--muted)}
+.sticker-creator-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+.upload-zone{border:2px dashed var(--border);border-radius:16px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg2)}
+.upload-zone:hover{border-color:var(--cal-accent);background:var(--bg3)}
+.upload-zone .uz-icon{font-size:36px;margin-bottom:8px}
+.upload-zone p{font-family:'Noto Sans TC',sans-serif;font-size:13px;color:var(--muted)}
+.preview-area{display:none;flex-direction:column;gap:12px}
+.preview-area.show{display:flex}
+.preview-canvas-wrap{position:relative;border-radius:14px;overflow:hidden;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;min-height:200px}
+.preview-img{max-width:100%;max-height:240px;display:block;border-radius:10px}
+.shape-opts{display:flex;gap:8px}
+.shape-btn{flex:1;padding:8px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--subtle);font-family:'Noto Sans TC',sans-serif;font-size:12px;cursor:pointer;transition:all .18s;text-align:center}
+.shape-btn.active{border-color:var(--cal-accent);color:var(--cal-accent);background:var(--cal-accent-soft)}
+.my-stickers-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.my-sticker-item{aspect-ratio:1;border-radius:12px;border:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;cursor:pointer;transition:all .18s}
+.my-sticker-item:hover{box-shadow:0 3px 12px var(--shadow);transform:scale(1.04)}
+.my-sticker-item img{width:80%;height:80%;object-fit:cover;border-radius:50%}
+.my-sticker-item.rect img{border-radius:8px}
+.my-sticker-item .del-sticker{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .15s}
+.my-sticker-item:hover .del-sticker{opacity:1}
+
+/* ══ SETTINGS ══ */
+#settingsScreen{background:var(--bg)}
+.settings-body{flex:1;overflow-y:auto;padding:0 0 16px}
+.settings-section{padding:16px 16px 0}
+.settings-section-title{font-family:'Noto Sans TC',sans-serif;font-size:10px;font-weight:500;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;padding-left:2px}
+.settings-card{background:var(--bg2);border-radius:14px;border:1px solid var(--border);overflow:hidden;margin-bottom:14px}
+.settings-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.settings-row:last-child{border-bottom:none}
+.settings-row-icon{font-size:20px;flex-shrink:0}
+.settings-row-text{flex:1;min-width:0}
+.settings-row-label{font-family:'Noto Serif TC',serif;font-size:14px;font-weight:500;color:var(--strong)}
+.settings-row-desc{font-family:'Noto Sans TC',sans-serif;font-size:11px;color:var(--muted);margin-top:1px}
+.toggle-wrap{flex-shrink:0}
+.toggle{position:relative;width:44px;height:26px;display:inline-block}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;border-radius:26px;background:var(--border);transition:background .25s;cursor:pointer}
+.toggle-slider::before{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;border-radius:50%;background:#fff;transition:transform .25s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.toggle input:checked+.toggle-slider{background:var(--cal-accent)}
+.toggle input:checked+.toggle-slider::before{transform:translateX(18px)}
+.time-input{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:'Noto Sans TC',sans-serif;font-size:13px;color:var(--ink);outline:none;cursor:pointer}
+.time-input:focus{border-color:var(--cal-accent)}
+.theme-opts{display:flex;gap:8px;padding:12px 16px}
+.theme-opt{flex:1;padding:10px 6px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg);cursor:pointer;text-align:center;transition:all .18s}
+.theme-opt.active{border-color:var(--cal-accent);box-shadow:0 0 0 2px var(--cal-accent-soft)}
+.theme-opt .theme-preview{width:100%;height:32px;border-radius:8px;margin-bottom:6px;border:1px solid var(--border)}
+.theme-opt .theme-name{font-family:'Noto Sans TC',sans-serif;font-size:11px;color:var(--subtle)}
+.theme-opt.active .theme-name{color:var(--cal-accent);font-weight:500}
+
+/* ═══ TIME CAPSULE ═══ */
+/* Settings entry row */
+.capsule-entry-row{
+  cursor:pointer;
+  background:linear-gradient(135deg,rgba(212,133,122,.08),rgba(155,134,189,.08));
+}
+.capsule-entry-row:hover{background:linear-gradient(135deg,rgba(212,133,122,.16),rgba(155,134,189,.16))}
+.capsule-entry-icon{
+  font-size:22px;flex-shrink:0;
+  filter:drop-shadow(0 0 4px rgba(212,133,122,.6));
+}
+
+/* Capsule Screen */
+#capsuleScreen{background:var(--bg)}
+.capsule-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+
+/* Sealed envelope card */
+.capsule-card{
+  border-radius:18px;border:1px solid var(--border);
+  background:var(--bg2);overflow:hidden;
+  position:relative;
+}
+.capsule-card.sealed{
+  background:linear-gradient(135deg,#fdf6ee,#f3ece3);
+  border-color:rgba(212,133,122,.3);
+  cursor:pointer;
+}
+[data-theme="dark"] .capsule-card.sealed{
+  background:linear-gradient(135deg,#1e1812,#1a1510);
+  border-color:rgba(212,133,122,.25);
+}
+.capsule-card.unlocked{
+  background:var(--bg2);
+  border-color:var(--cal-accent);
+  box-shadow:0 0 0 2px var(--cal-accent-soft);
+}
+
+/* Sealed envelope visual */
+.capsule-envelope{
+  display:flex;flex-direction:column;align-items:center;
+  padding:28px 20px 22px;gap:10px;
+}
+.capsule-env-icon{
+  font-size:48px;line-height:1;
+  animation:envFloat 3s ease-in-out infinite;
+  filter:drop-shadow(0 4px 12px rgba(212,133,122,.35));
+}
+@keyframes envFloat{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+/* Glow pulse around envelope */
+.capsule-env-glow{
+  position:absolute;
+  width:90px;height:90px;border-radius:50%;
+  background:radial-gradient(circle,rgba(212,133,122,.22),transparent 70%);
+  animation:envGlow 3s ease-in-out infinite;
+}
+@keyframes envGlow{
+  0%,100%{transform:scale(1);opacity:.7}
+  50%{transform:scale(1.3);opacity:1}
+}
+.capsule-countdown{
+  font-family:'Noto Sans TC',sans-serif;font-size:13px;
+  font-weight:300;color:var(--subtle);letter-spacing:.5px;
+  text-align:center;
+}
+.capsule-countdown strong{
+  display:block;font-family:'Noto Serif TC',serif;
+  font-size:22px;font-weight:600;color:var(--cal-accent);
+  letter-spacing:1px;line-height:1.2;margin-top:4px;
+}
+.capsule-unlock-label{
+  font-family:'Noto Sans TC',sans-serif;font-size:10px;
+  color:var(--muted);letter-spacing:2px;text-transform:uppercase;
+}
+
+/* Unlocked capsule content */
+.capsule-open-content{padding:20px}
+.capsule-open-header{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:14px;
+}
+.capsule-open-icon{font-size:24px}
+.capsule-open-title{
+  font-family:'Noto Serif TC',serif;font-size:15px;
+  font-weight:600;color:var(--strong);
+}
+.capsule-open-date{
+  font-family:'Noto Sans TC',sans-serif;font-size:10px;
+  color:var(--muted);margin-top:1px;
+}
+.capsule-open-img{
+  width:100%;max-height:220px;object-fit:cover;
+  border-radius:12px;margin-bottom:12px;
+  border:1px solid var(--border);
+}
+.capsule-open-note{
+  font-family:'Noto Serif TC',serif;font-size:14px;
+  font-weight:300;color:var(--ink);line-height:1.9;
+}
+.capsule-unlock-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--cal-accent-soft);color:var(--cal-accent);
+  font-family:'Noto Sans TC',sans-serif;font-size:10px;font-weight:500;
+  padding:3px 9px;border-radius:10px;margin-bottom:14px;
+}
+
+/* Create capsule form */
+.capsule-create-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:14px;border-radius:14px;
+  border:1.5px dashed var(--cal-accent);
+  background:var(--cal-accent-soft);
+  color:var(--cal-accent);
+  font-family:'Noto Serif TC',serif;font-size:14px;font-weight:500;
+  cursor:pointer;transition:all .18s;
+}
+.capsule-create-btn:hover{background:var(--cal-accent);color:#fff;border-style:solid}
+
+/* Capsule form sheet (bottom drawer) */
+#capsuleFormBg{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.5);z-index:8500;
+  align-items:flex-end;justify-content:center;
+}
+#capsuleFormBg.open{display:flex}
+.capsule-form-sheet{
+  background:var(--bg);border-radius:24px 24px 0 0;
+  width:100%;max-width:430px;
+  max-height:90vh;overflow-y:auto;
+  padding:24px 20px 40px;
+  box-shadow:0 -8px 40px var(--shadow2);
+  animation:slideUp .25s ease;
+  border-top:1px solid var(--border);
+}
+.capsule-form-title{
+  font-family:'Noto Serif TC',serif;font-size:18px;
+  font-weight:600;color:var(--strong);
+  text-align:center;margin-bottom:4px;
+}
+.capsule-form-sub{
+  font-family:'Noto Sans TC',sans-serif;font-size:11px;
+  color:var(--muted);text-align:center;margin-bottom:20px;
+}
+.capsule-field-label{
+  font-family:'Noto Sans TC',sans-serif;font-size:10px;
+  font-weight:500;color:var(--muted);letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:6px;
+}
+.capsule-textarea{
+  width:100%;min-height:100px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:11px;
+  padding:12px;font-family:'Noto Serif TC',serif;
+  font-size:14px;font-weight:300;color:var(--ink);
+  resize:none;outline:none;line-height:1.8;
+  transition:border-color .18s;margin-bottom:14px;
+}
+.capsule-textarea:focus{border-color:var(--muted)}
+/* Unlock type selector */
+.capsule-unlock-opts{display:flex;gap:8px;margin-bottom:14px}
+.capsule-unlock-opt{
+  flex:1;padding:10px 8px;border-radius:12px;
+  border:1.5px solid var(--border);background:var(--bg3);
+  font-family:'Noto Sans TC',sans-serif;font-size:12px;
+  color:var(--muted);cursor:pointer;text-align:center;
+  transition:all .18s;
+}
+.capsule-unlock-opt.active{
+  border-color:var(--cal-accent);
+  background:var(--cal-accent-soft);
+  color:var(--cal-accent);font-weight:500;
+}
+.capsule-date-input{
+  width:100%;padding:10px 12px;
+  border:1.5px solid var(--border);border-radius:10px;
+  background:var(--bg3);font-family:'Noto Sans TC',sans-serif;
+  font-size:13px;color:var(--ink);outline:none;
+  transition:border-color .18s;margin-bottom:14px;
+}
+.capsule-date-input:focus{border-color:var(--cal-accent)}
+/* Photo upload zone for capsule */
+.capsule-photo-zone{
+  border:1.5px dashed var(--border);border-radius:12px;
+  padding:18px;text-align:center;cursor:pointer;
+  background:var(--bg3);transition:all .18s;margin-bottom:16px;
+  position:relative;overflow:hidden;
+}
+.capsule-photo-zone:hover{border-color:var(--cal-accent);background:var(--cal-accent-soft)}
+.capsule-photo-zone img{
+  width:100%;max-height:160px;object-fit:cover;
+  border-radius:8px;
+}
+.capsule-photo-placeholder{
+  font-size:28px;margin-bottom:6px;
+}
+.capsule-photo-label{
+  font-family:'Noto Sans TC',sans-serif;font-size:12px;color:var(--muted);
+}
+.capsule-submit-btn{
+  width:100%;padding:14px;border-radius:14px;
+  background:var(--strong);color:var(--bg);border:none;
+  font-family:'Noto Serif TC',serif;font-size:15px;font-weight:500;
+  cursor:pointer;transition:opacity .16s;
+}
+.capsule-submit-btn:hover{opacity:.85}
+.capsule-empty{
+  text-align:center;padding:32px 20px;
+  font-family:'Noto Sans TC',sans-serif;font-size:13px;color:var(--muted);
+}
+.capsule-empty-icon{font-size:40px;margin-bottom:10px}
+
+/* Sealed tap overlay */
+#capsuleSealedModal{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.55);z-index:9100;
+  align-items:center;justify-content:center;padding:30px;
+}
+#capsuleSealedModal.open{display:flex}
+.capsule-sealed-box{
+  background:var(--bg);border-radius:22px;
+  padding:32px 24px 28px;max-width:320px;width:100%;
+  text-align:center;animation:popIn .22s ease;
+  border:1px solid var(--border);
+}
+.capsule-sealed-icon{font-size:52px;margin-bottom:12px;animation:envFloat 3s ease-in-out infinite}
+.capsule-sealed-msg{
+  font-family:'Noto Serif TC',serif;font-size:16px;
+  font-weight:500;color:var(--strong);line-height:1.6;margin-bottom:8px;
+}
+.capsule-sealed-sub{
+  font-family:'Noto Sans TC',sans-serif;font-size:12px;
+  color:var(--muted);line-height:1.7;margin-bottom:20px;
+}
+.capsule-sealed-ok{
+  padding:10px 28px;border-radius:12px;
+  background:var(--strong);color:var(--bg);border:none;
+  font-family:'Noto Sans TC',sans-serif;font-size:13px;
+  cursor:pointer;transition:opacity .16s;
+}
+.capsule-sealed-ok:hover{opacity:.8}
+
+/* ═══ FUTURE GIFT / MEMORY RECALL ═══ */
+#giftOverlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.52);z-index:9200;
+  align-items:flex-end;justify-content:center;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+#giftOverlay.open{display:flex;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+.gift-sheet{
+  background:var(--bg);
+  border-radius:28px 28px 0 0;
+  width:100%;max-width:430px;
+  padding:0 0 36px;
+  box-shadow:0 -12px 48px var(--shadow2);
+  animation:giftSlideUp .38s cubic-bezier(.34,1.26,.64,1);
+  overflow:hidden;
+  border-top:1px solid rgba(212,133,122,.2);
+}
+@keyframes giftSlideUp{
+  from{transform:translateY(100%);opacity:0}
+  to{transform:translateY(0);opacity:1}
+}
+
+/* Sparkle glow header bar */
+.gift-header-bar{
+  background:linear-gradient(135deg,#f5ddd7,#e8d5ee,#d7e8f5);
+  padding:20px 20px 16px;
+  position:relative;overflow:hidden;
+}
+[data-theme="dark"] .gift-header-bar{
+  background:linear-gradient(135deg,#2a1a18,#1e1a2a,#18202a);
+}
+/* Floating sparkles */
+.gift-header-bar::before,.gift-header-bar::after{
+  content:'✨';position:absolute;font-size:20px;
+  animation:sparkleFloat 4s ease-in-out infinite;
+}
+.gift-header-bar::before{top:8px;right:24px;animation-delay:.5s}
+.gift-header-bar::after{content:'🌸';top:12px;left:20px;font-size:16px;animation-delay:1.2s}
+@keyframes sparkleFloat{
+  0%,100%{transform:translateY(0) rotate(0deg);opacity:.7}
+  50%{transform:translateY(-6px) rotate(8deg);opacity:1}
+}
+.gift-tag{
+  font-family:'Noto Sans TC',sans-serif;
+  font-size:10px;font-weight:500;
+  color:var(--cal-accent);letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:6px;
+  display:flex;align-items:center;gap:5px;
+}
+.gift-headline{
+  font-family:'Noto Serif TC',serif;
+  font-size:16px;font-weight:600;
+  color:var(--strong);line-height:1.5;
+}
+
+/* Memory photo with soft-glow filter */
+.gift-photo-wrap{
+  position:relative;margin:16px 20px 0;
+  border-radius:16px;overflow:hidden;
+  box-shadow:0 4px 20px var(--shadow2);
+}
+.gift-photo{
+  width:100%;max-height:220px;
+  object-fit:cover;display:block;
+  /* Warm soft-glow vintage filter */
+  filter:brightness(1.04) contrast(.92) saturate(1.1) sepia(.08);
+}
+/* Dreamy vignette overlay */
+.gift-photo-wrap::after{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at center,transparent 55%,rgba(212,133,122,.18) 100%);
+  pointer-events:none;border-radius:16px;
+}
+/* Days-ago badge */
+.gift-days-badge{
+  position:absolute;bottom:10px;right:12px;
+  background:rgba(0,0,0,.42);color:#fff;
+  font-family:'Noto Sans TC',sans-serif;font-size:10px;font-weight:300;
+  padding:3px 9px;border-radius:10px;
+  backdrop-filter:blur(4px);
+  letter-spacing:.5px;
+}
+
+/* Memory note excerpt */
+.gift-note{
+  margin:14px 20px 0;
+  font-family:'Noto Serif TC',serif;
+  font-size:14px;font-weight:300;color:var(--ink);
+  line-height:1.85;
+}
+.gift-note-empty{
+  margin:14px 20px 0;
+  font-family:'Noto Sans TC',sans-serif;
+  font-size:12px;color:var(--muted);font-style:italic;
+}
+
+/* Action buttons */
+.gift-actions{
+  display:flex;gap:10px;margin:20px 20px 0;
+}
+.gift-btn{
+  flex:1;padding:12px 10px;border-radius:14px;
+  font-family:'Noto Sans TC',sans-serif;font-size:13px;font-weight:500;
+  cursor:pointer;border:none;transition:all .18s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.gift-btn.primary{
+  background:var(--strong);color:var(--bg);
+}
+.gift-btn.primary:hover{opacity:.85}
+.gift-btn.secondary{
+  background:var(--bg3);color:var(--subtle);
+  border:1px solid var(--border);
+}
+.gift-btn.secondary:hover{background:var(--border)}
+
+/* ══ MODAL ══ */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:8000;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-box{background:var(--bg);border-radius:20px;padding:28px 22px 20px;width:300px;box-shadow:0 16px 48px var(--shadow2);animation:popIn .22s ease;border:1px solid var(--border)}
+.modal-title{font-family:'Noto Serif TC',serif;font-size:16px;font-weight:600;color:var(--strong);margin-bottom:16px}
+.modal-input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg3);font-family:'Noto Serif TC',serif;font-size:15px;color:var(--ink);outline:none;transition:border-color .18s;margin-bottom:8px}
+.modal-input:focus{border-color:var(--muted)}
+.swatch-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.swatch{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:transform .15s,border-color .15s}
+.swatch:hover{transform:scale(1.15)}
+.swatch.selected{border-color:var(--strong);transform:scale(1.1)}
+.modal-btns{display:flex;gap:8px}
+.modal-btn{flex:1;padding:9px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);font-family:'Noto Sans TC',sans-serif;font-size:13px;color:var(--subtle);cursor:pointer;transition:all .16s}
+.modal-btn.primary{background:var(--strong);color:var(--bg);border-color:var(--strong)}
+.modal-btn:hover{opacity:.85}
+
+/* Toast */
+.toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%) translateY(14px);background:var(--strong);color:var(--bg);padding:8px 18px;border-radius:18px;font-family:'Noto Sans TC',sans-serif;font-size:12px;opacity:0;transition:all .22s;z-index:9998;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+
+/* ══ LEGO COLLECTION ══ */
+/* ── My Collection (我的圖鑑) — Minimal Lego Plate ── */
+.collection-header{
+  padding:44px 14px 6px;
+  display:flex;flex-direction:column;gap:2px;
+}
+.collection-title{
+  font-family:'Noto Serif TC',serif;font-size:22px;font-weight:600;color:var(--strong);
+}
+.collection-sub{
+  font-family:'Noto Sans TC',sans-serif;font-size:10px;color:var(--muted);letter-spacing:2px;
+}
+
+/* Lego plate card — one per tier */
+.lego-plate-card{
+  background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;
+  padding:18px 14px 20px;margin-bottom:18px;
+  animation:fadeUp .32s ease both;position:relative;overflow:hidden;
+}
+.lego-plate-title{
+  font-family:'Noto Serif TC',serif;font-size:15px;font-weight:600;
+  color:var(--strong);margin-bottom:3px;
+  display:flex;align-items:center;gap:8px;
+}
+.lego-plate-desc{
+  font-family:'Noto Sans TC',sans-serif;font-size:11px;color:var(--muted);
+  margin-bottom:14px;
+}
+
+/* The actual lego plate grid */
+.lego-plate-grid{
+  display:grid;
+  gap:4px;
+  width:fit-content;
+  margin:0 auto;
+  padding:10px;
+  background:linear-gradient(145deg,#c9a96e,#b8935a);
+  border-radius:10px;
+  box-shadow:
+    0 4px 0 rgba(0,0,0,.35),
+    0 6px 16px rgba(0,0,0,.22),
+    inset 0 1px 0 rgba(255,255,255,.18);
+}
+[data-theme="dark"] .lego-plate-grid{
+  background:linear-gradient(145deg,#3a2a10,#2c1f0a);
+}
+
+/* Individual slot on the plate */
+.lego-plate-slot{
+  border-radius:5px;
+  position:relative;
+  overflow:hidden;
+  flex-shrink:0;
+  /* The "hole" for an empty slot */
+  background:#b8935a;
+  box-shadow:
+    inset 0 2px 5px rgba(0,0,0,.45),
+    inset 0 -1px 0 rgba(255,255,255,.08);
+  border:1px solid rgba(0,0,0,.25);
+  cursor:default;
+  transition:transform .15s;
+}
+[data-theme="dark"] .lego-plate-slot{
+  background:#241808;
+}
+/* The "peg hole" visual in empty slots */
+.lego-plate-slot.empty::after{
+  content:'';
+  position:absolute;
+  inset:20% 25%;
+  border-radius:50%;
+  background:rgba(0,0,0,.28);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.5);
+}
+
+/* Filled slot — a brick sitting on the plate */
+.lego-plate-slot.filled{
+  box-shadow:
+    0 3px 0 rgba(0,0,0,.4),
+    0 4px 10px rgba(0,0,0,.25),
+    inset 0 1px 0 rgba(255,255,255,.18);
+  cursor:pointer;
+  background:var(--cal-accent);
+}
+.lego-plate-slot.filled:hover{transform:scale(1.08);z-index:2}
+/* Stud on filled brick */
+.lego-plate-slot.filled::before{
+  content:'';
+  position:absolute;
+  top:-3px;left:50%;transform:translateX(-50%);
+  width:36%;height:5px;
+  border-radius:3px 3px 0 0;
+  background:inherit;
+  box-shadow:0 -1px 0 rgba(255,255,255,.12);
+  z-index:3;
+}
+.lego-plate-slot.filled img{
+  width:100%;height:100%;object-fit:cover;display:block;border-radius:5px;
+}
+
+/* Open canvas button */
+.lego-view-btn{
+  width:100%;padding:11px;border-radius:12px;
+  background:var(--strong);color:var(--bg);border:none;
+  font-family:'Noto Sans TC',sans-serif;font-size:13px;font-weight:500;
+  cursor:pointer;margin-top:14px;transition:opacity .16s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.lego-view-btn:hover{opacity:.85}
+.lego-view-btn.locked{background:var(--bg3);color:var(--muted);cursor:default;border:1px solid var(--border)}
+.lego-view-btn.locked:hover{opacity:1}
+
+/* ── CONFETTI OVERLAY ── */
+#confettiOverlay{
+  display:none;position:fixed;inset:0;z-index:9800;
+  pointer-events:none;
+}
+#confettiOverlay.active{display:block}
+.confetti-piece{
+  position:absolute;
+  width:10px;height:10px;
+  border-radius:2px;
+  animation:confettiFall linear forwards;
+  top:-20px;
+}
+@keyframes confettiFall{
+  0%{transform:translateY(0) rotate(0deg) scale(1);opacity:1}
+  80%{opacity:1}
+  100%{transform:translateY(110vh) rotate(720deg) scale(.5);opacity:0}
+}
+
+/* keep old lego-tier-card for the monthly canvas tier in 本月圖鑑 */
+.lego-tier-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:18px;
+  padding:18px 16px;margin-bottom:14px;overflow:hidden;position:relative;
+  animation:fadeUp .32s ease both;
+}
+.lego-tier-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.lego-tier-icon{font-size:30px;line-height:1}
+.lego-tier-info{flex:1}
+.lego-tier-name{font-family:'Noto Serif TC',serif;font-size:15px;font-weight:600;color:var(--strong)}
+.lego-tier-sub{font-family:'Noto Sans TC',sans-serif;font-size:11px;color:var(--muted);margin-top:2px}
+.lego-tier-count{font-family:'Noto Sans TC',sans-serif;font-size:13px;font-weight:600;color:var(--cal-accent)}
+.lego-progress-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:10px}
+.lego-progress-fill{height:100%;border-radius:3px;background:var(--cal-accent);transition:width .6s cubic-bezier(.4,0,.2,1)}
+.lego-unlock-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:5px 12px;border-radius:20px;
+  background:var(--cal-accent-soft);
+  font-family:'Noto Sans TC',sans-serif;font-size:11px;
+  color:var(--cal-accent);font-weight:500;
+}
+.lego-unlock-badge.locked{background:var(--bg3);color:var(--muted)}
+.lego-mini-preview{
+  display:flex;gap:3px;flex-wrap:wrap;margin-top:10px;
+}
+.lego-mini-brick{
+  width:28px;height:28px;border-radius:5px;overflow:hidden;
+  position:relative;flex-shrink:0;
+  box-shadow:0 2px 4px rgba(0,0,0,.2), inset 0 -2px 0 rgba(0,0,0,.25);
+  background:var(--bg3);border:1px solid var(--border);
+}
+.lego-mini-brick img{width:100%;height:100%;object-fit:cover;display:block}
+.lego-mini-brick.empty-slot{
+  background:#e8e0d4;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.10),inset 0 -1px 0 rgba(255,255,255,.5);
+  border:1px solid #d8cfc4;
+}
+[data-theme="dark"] .lego-mini-brick.empty-slot{background:#2a2218;border-color:#3a3228}
+.lego-open-btn{
+  width:100%;padding:11px;border-radius:12px;
+  background:var(--strong);color:var(--bg);border:none;
+  font-family:'Noto Sans TC',sans-serif;font-size:13px;font-weight:500;
+  cursor:pointer;margin-top:12px;transition:opacity .16s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.lego-open-btn:hover{opacity:.85}
+.lego-open-btn.locked-btn{background:var(--bg3);color:var(--muted);cursor:default;border:1px solid var(--border)}
+.lego-open-btn.locked-btn:hover{opacity:1}
+
+/* ── LEGO CANVAS (fullscreen) ── */
+.lego-brick{
+  position:absolute;
+  border-radius:6px;overflow:hidden;
+  box-shadow:
+    0 3px 0 rgba(0,0,0,.45),
+    0 5px 12px rgba(0,0,0,.3),
+    inset 0 1px 0 rgba(255,255,255,.15);
+  transition:none;will-change:transform;
+  background:#3a2a18;
+}
+.lego-brick img{
+  width:100%;height:100%;object-fit:cover;display:block;
+}
+/* Stud (the little bump on top of a lego brick) */
+.lego-brick::before{
+  content:'';position:absolute;
+  top:-4px;left:50%;transform:translateX(-50%);
+  width:38%;height:6px;border-radius:3px 3px 0 0;
+  background:inherit;
+  box-shadow:0 -1px 0 rgba(255,255,255,.1),inset 0 1px 0 rgba(255,255,255,.12);
+  z-index:2;
+}
+.lego-brick.empty-brick{
+  background:#3d3020;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.05),
+    inset 0 2px 8px rgba(0,0,0,.4),
+    inset 0 -1px 0 rgba(255,255,255,.04);
+  border-radius:6px;
+}
+.lego-brick.empty-brick::before{background:#3d3020;opacity:.5}
+
+/* snap animation */
+@keyframes legoSnap{
+  0%{opacity:0;transform:translateY(-60px) scale(.7) rotate(var(--snap-rot))}
+  70%{transform:translateY(4px) scale(1.05) rotate(0deg)}
+  85%{transform:translateY(-2px) scale(.98)}
+  100%{opacity:1;transform:translateY(0) scale(1) rotate(0deg)}
+}
+.lego-brick.snapping{animation:legoSnap .45s cubic-bezier(.34,1.46,.64,1) both}
+
+/* ── LEGO canvas shape overlay (SVG mask) ── */
+#legoGrid svg.lego-shape-mask{
+  position:absolute;inset:0;pointer-events:none;z-index:5;
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+/* ══ YEAR PICKER MODAL ══ */
+#yearPickerBg{
+  display:none;position:fixed;inset:0;z-index:1500;
+  background:rgba(0,0,0,.35);
+  align-items:flex-end;justify-content:center;
+}
+#yearPickerBg.open{display:flex}
+.year-picker-sheet{
+  width:100%;max-width:430px;
+  background:var(--bg2);
+  border-radius:22px 22px 0 0;
+  padding:18px 16px calc(28px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 -4px 32px var(--shadow2);
+  animation:slideUpSheet .28s cubic-bezier(.4,0,.2,1) both;
+}
+@keyframes slideUpSheet{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.year-picker-title{
+  font-family:'Noto Sans TC',sans-serif;font-size:11px;font-weight:500;
+  letter-spacing:3px;color:var(--muted);text-transform:uppercase;
+  text-align:center;margin-bottom:18px;
+}
+.year-picker-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+}
+.year-opt{
+  padding:11px 4px;border-radius:12px;border:1.5px solid var(--border);
+  background:var(--bg);color:var(--subtle);
+  font-family:'Noto Serif TC',serif;font-size:15px;font-weight:400;
+  cursor:pointer;text-align:center;
+  transition:all .18s;
+}
+.year-opt:hover{background:var(--bg3);border-color:var(--muted)}
+.year-opt.selected{
+  background:var(--strong);color:var(--bg);
+  border-color:var(--strong);font-weight:600;
+}
+.year-opt.current-year{
+  border-color:var(--cal-accent);color:var(--cal-accent);
+}
+.year-opt.selected.current-year{
+  background:var(--cal-accent);color:#fff;border-color:var(--cal-accent);
+}
+.year-picker-cancel{
+  margin-top:14px;width:100%;padding:12px;border-radius:14px;
+  border:1px solid var(--border);background:transparent;
+  font-family:'Noto Sans TC',sans-serif;font-size:13px;color:var(--muted);
+  cursor:pointer;transition:background .15s;
+}
+.year-picker-cancel:hover{background:var(--bg3)}
+/* Make year label look tappable */
+#calYearLabel{
+  cursor:pointer;display:inline-flex;align-items:center;gap:4px;
+  transition:color .18s;
+}
+#calYearLabel:hover{color:var(--subtle)}
+#calYearLabel::after{
+  content:'▾';font-size:8px;opacity:.6;
+}
+
+/* ══ WELCOME / ONBOARDING SCREEN ══ */
+#welcomeScreen{
+  position:fixed;inset:0;z-index:2000;
+  background:var(--bg);
+  display:none;          /* JS shows it only on first launch */
+  flex-direction:column;align-items:center;justify-content:center;
+  padding:40px 32px 60px;
+  gap:0;
+  transition:opacity .5s cubic-bezier(.4,0,.2,1), transform .5s cubic-bezier(.4,0,.2,1);
+}
+#welcomeScreen.hiding{
+  opacity:0;
+  transform:translateY(-24px);
+  pointer-events:none;
+}
+/* Decorative top illustration area */
+.wl-deco{
+  font-size:52px;line-height:1;margin-bottom:28px;
+  animation:fadeUp .6s ease .1s both;
+}
+.wl-headline{
+  font-family:'Noto Serif TC',serif;
+  font-size:22px;font-weight:600;
+  color:var(--strong);
+  text-align:center;line-height:1.5;
+  margin-bottom:10px;
+  animation:fadeUp .6s ease .18s both;
+}
+.wl-sub{
+  font-family:'Noto Sans TC',sans-serif;
+  font-size:13px;font-weight:300;color:var(--subtle);
+  text-align:center;line-height:1.8;
+  margin-bottom:44px;
+  animation:fadeUp .6s ease .24s both;
+}
+/* Input section */
+.wl-field{
+  width:100%;margin-bottom:14px;
+  animation:fadeUp .6s ease .32s both;
+}
+.wl-label{
+  font-family:'Noto Sans TC',sans-serif;
+  font-size:11px;font-weight:500;letter-spacing:2px;
+  color:var(--muted);text-transform:uppercase;
+  margin-bottom:8px;display:block;
+}
+.wl-input{
+  width:100%;padding:14px 16px;
+  background:var(--bg2);border:1.5px solid var(--border);border-radius:14px;
+  font-family:'Noto Serif TC',serif;font-size:16px;color:var(--ink);
+  outline:none;transition:border-color .2s,box-shadow .2s;
+  -webkit-appearance:none;
+}
+.wl-input:focus{
+  border-color:var(--cal-accent);
+  box-shadow:0 0 0 3px var(--cal-accent-soft);
+}
+.wl-input::placeholder{color:var(--muted);font-weight:300}
+/* Start button */
+.wl-btn{
+  width:100%;margin-top:28px;
+  padding:16px;border-radius:18px;border:none;
+  background:var(--strong);color:var(--bg);
+  font-family:'Noto Serif TC',serif;font-size:16px;font-weight:500;
+  cursor:pointer;letter-spacing:.5px;
+  transition:opacity .18s,transform .18s;
+  animation:fadeUp .6s ease .4s both;
+  -webkit-appearance:none;
+}
+.wl-btn:hover{opacity:.88}
+.wl-btn:active{transform:scale(.97)}
+/* Thin decorative rule */
+.wl-rule{
+  width:40px;height:2px;border-radius:2px;
+  background:var(--border);margin:0 auto 36px;
+  animation:fadeUp .6s ease .28s both;
+}</style>
+</head>
+<body>
+
+<!-- ═══ WELCOME / ONBOARDING ═══ -->
+<div id="welcomeScreen">
+  <div class="wl-deco">📔</div>
+  <div class="wl-headline">開始你的 plog 日常</div>
+  <div class="wl-sub">先為這本日誌取個名字吧<br>它將陪你記錄每一個值得珍藏的瞬間</div>
+  <div class="wl-rule"></div>
+  <div class="wl-field">
+    <label class="wl-label" for="wlNameInput">日誌名稱</label>
+    <input
+      id="wlNameInput"
+      class="wl-input"
+      type="text"
+      maxlength="16"
+      placeholder="例如：Jenna 的手帳"
+      autocomplete="off"
+    >
+  </div>
+  <button class="wl-btn" onclick="completeOnboarding()">開始使用 →</button>
+</div>
+
+<!-- ═══ YEAR PICKER ═══ -->
+<div id="yearPickerBg" onclick="if(event.target===this)closeYearPicker()">
+  <div class="year-picker-sheet">
+    <div class="year-picker-title">選擇年份</div>
+    <div class="year-picker-grid" id="yearPickerGrid"></div>
+    <button class="year-picker-cancel" onclick="closeYearPicker()">取消</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL ═══ -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">命名日曆</div>
+    <input class="modal-input" id="modalInput" maxlength="12" placeholder="最多 12 字">
+    <div class="swatch-row" id="swatchRow"></div>
+    <div class="modal-btns">
+      <button class="modal-btn" onclick="closeModal()">取消</button>
+      <button class="modal-btn primary" onclick="confirmModal()">確定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CALENDAR SCREEN ═══ -->
+<div id="calScreen" class="screen active">
+  <div class="top-bar"><div class="cal-switcher" id="calSwitcher"></div></div>
+  <div class="cal-header">
+    <div>
+      <div class="cal-year-label" id="calYearLabel" onclick="openYearPicker()">2026</div>
+      <div class="cal-month-name" id="calMonthName">三月</div>
+    </div>
+    <div class="cal-controls" style="flex-direction:column;align-items:flex-end;gap:6px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="view-toggle">
+          <button class="view-btn active" id="viewMonthBtn" onclick="setView('month')">月</button>
+          <button class="view-btn"        id="viewYearBtn"  onclick="setView('year')">年</button>
+        </div>
+        <button class="nav-btn" id="navPrev" onclick="navigate(-1)">‹</button>
+        <button class="nav-btn" id="navNext" onclick="navigate(1)">›</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="cal-canvas-toggle" id="calCanvasToggle" onclick="toggleCalCanvas()">✏️ 貼紙模式</button>
+        <button class="cal-canvas-toggle" id="legoProgressBtn" onclick="openLegoMonthCanvas()">🧱 本月圖鑑</button>
+        <button class="cal-canvas-toggle" id="myCollectionBtn" style="display:none" onclick="switchTab('collection')">🧱 我的圖鑑</button>
+      </div>
+    </div>
+  </div>
+  <div class="weekday-row" id="weekdayRow">
+    <div class="weekday-label">日</div><div class="weekday-label">一</div>
+    <div class="weekday-label">二</div><div class="weekday-label">三</div>
+    <div class="weekday-label">四</div><div class="weekday-label">五</div>
+    <div class="weekday-label">六</div>
+  </div>
+  <!-- Calendar canvas: grid + floating stickers -->
+  <div class="cal-canvas-wrap" id="calCanvasWrap">
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-sticker-layer" id="calStickerLayer"></div>
+  </div>
+  <!-- My Stickers panel — visible only in canvas mode -->
+  <div id="calCustomStickerPanel" style="display:none;padding:8px 16px 4px;border-top:1px solid var(--border);flex-shrink:0;overflow:hidden">
+    <div style="font-family:'Noto Sans TC',sans-serif;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">我的貼紙</div>
+    <div class="sticker-strip" id="calCustomStickerStrip"></div>
+  </div>
+  <div id="yearView" style="display:none"><div class="year-view" id="yearGrid"></div></div>
+  <div class="feed-section">
+    <div class="feed-header">
+      <div class="feed-title" id="feedTitle">本月紀錄</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="feed-quick-add" onclick="openTodayEntry()" title="新增今日紀錄">＋</button>
+        <div class="sort-toggle">
+          <button class="sort-btn active" id="sortNewBtn" onclick="setSort('new')">最新</button>
+          <button class="sort-btn"        id="sortOldBtn" onclick="setSort('old')">最舊</button>
+        </div>
+      </div>
+    </div>
+    <div class="feed-list" id="feedList"></div>
+  </div>
+</div>
+
+<!-- ═══ ENTRY SCREEN ═══ -->
+<div id="entryScreen" class="screen">
+  <div class="entry-header">
+    <button class="back-btn" onclick="goBack()">←</button>
+    <div class="entry-date-display">
+      <div class="entry-date-num" id="entryDateNum"></div>
+      <div class="entry-date-sub" id="entryDateSub"></div>
+      <div class="entry-cal-badge" id="entryCalBadge"></div>
+    </div>
+    <button class="save-btn" onclick="saveEntry()">儲存</button>
+  </div>
+  <div class="entry-body">
+    <!-- Multi-photo carousel + sticker canvas per slide -->
+    <div class="photo-carousel-wrap empty-state" id="carouselWrap">
+      <div class="carousel-track" id="carouselTrack">
+        <!-- slides injected by JS -->
+      </div>
+      <!-- arrows, dots, fav, count badge injected by JS -->
+    </div>
+
+    <!-- Thumbnail strip -->
+    <div class="photo-strip" id="photoStrip"></div>
+    <div class="photo-count-label" id="photoCountLabel"></div>
+    <input type="file" id="photoInput" accept="image/*" multiple onchange="handleMultiPhotoUpload(event)">
+
+    <!-- Note -->
+    <div class="note-area">
+      <textarea class="note-input f1" id="noteInput" placeholder="今天的心情筆記..."></textarea>
+    </div>
+  </div>
+  <div class="bottom-nav">
+    <button class="nav-action primary" onclick="saveEntry()">✓ 完成</button>
+  </div>
+</div>
+
+<!-- ═══ STICKER CREATOR ═══ -->
+<div id="stickerScreen" class="screen">
+  <div class="screen-header"><h1>貼紙工坊</h1><p>上傳照片，製作專屬貼紙</p></div>
+  <div class="sticker-creator-body">
+    <div class="upload-zone" onclick="document.getElementById('stickerPhotoInput').click()">
+      <div class="uz-icon">✂️</div><p>點擊上傳照片，製作貼紙</p>
+    </div>
+    <input type="file" id="stickerPhotoInput" accept="image/*" onchange="handleStickerUpload(event)">
+    <div class="preview-area" id="previewArea">
+      <div class="toolbar-label">預覽</div>
+      <div class="preview-canvas-wrap"><img id="previewImg" class="preview-img" src="" alt=""></div>
+      <div class="toolbar-label" style="margin-bottom:4px">形狀</div>
+      <div class="shape-opts">
+        <button class="shape-btn active" id="shapeCircle" onclick="setShape('circle')">⬤ 圓形</button>
+        <button class="shape-btn"        id="shapeRect"   onclick="setShape('rect')">▬ 方形</button>
+      </div>
+      <button class="nav-action primary" onclick="saveStickerToLibrary()" style="flex:none;padding:12px">加入我的貼紙庫 ＋</button>
+    </div>
+    <div id="myStickersSection" style="display:none">
+      <div class="toolbar-label" style="margin-bottom:8px">我的貼紙庫</div>
+      <div class="my-stickers-grid" id="myStickersGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS ═══ -->
+<div id="settingsScreen" class="screen">
+  <div class="screen-header"><h1>設定</h1><p>個人化你的日記</p></div>
+  <div class="settings-body">
+    <div class="settings-section">
+      <div class="settings-section-title">通知</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-row-icon">🔔</div>
+          <div class="settings-row-text"><div class="settings-row-label">每日提醒</div><div class="settings-row-desc">提醒你記錄今天的生活</div></div>
+          <div class="toggle-wrap"><label class="toggle"><input type="checkbox" id="notifToggle" onchange="saveSettings()"><span class="toggle-slider"></span></label></div>
+        </div>
+        <div class="settings-row" id="notifTimeRow" style="display:none">
+          <div class="settings-row-icon">⏰</div>
+          <div class="settings-row-text"><div class="settings-row-label">提醒時間</div></div>
+          <input type="time" class="time-input" id="notifTime" value="21:00" onchange="saveSettings()">
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">主題配色</div>
+      <div class="settings-card">
+        <div class="theme-opts">
+          <div class="theme-opt" id="themeWarm"  onclick="setTheme('warm')"><div class="theme-preview" style="background:linear-gradient(135deg,#faf7f2,#f0ebe1)"></div><div class="theme-name">暖米</div></div>
+          <div class="theme-opt" id="themeLight" onclick="setTheme('light')"><div class="theme-preview" style="background:linear-gradient(135deg,#fff,#f0f0f0)"></div><div class="theme-name">純白</div></div>
+          <div class="theme-opt" id="themeDark"  onclick="setTheme('dark')"><div class="theme-preview" style="background:linear-gradient(135deg,#0e0e0e,#222)"></div><div class="theme-name">純黑</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">特別功能</div>
+      <div class="settings-card">
+        <div class="settings-row capsule-entry-row" onclick="switchTab('capsule')">
+          <div class="capsule-entry-icon">💌</div>
+          <div class="settings-row-text">
+            <div class="settings-row-label">秘密膠囊</div>
+            <div class="settings-row-desc">寫給未來自己的信，等待時機開啟</div>
+          </div>
+          <div style="color:var(--muted);font-size:18px">›</div>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">關於</div>
+      <div class="settings-card">
+        <div class="settings-row"><div class="settings-row-icon">🔒</div><div class="settings-row-text"><div class="settings-row-label">隱私保護</div><div class="settings-row-desc">所有資料存於本機，開發者零收集</div></div></div>
+        <div class="settings-row"><div class="settings-row-icon">📦</div><div class="settings-row-text"><div class="settings-row-label">版本</div><div class="settings-row-desc">Nikki v4.0</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CAPSULE SCREEN ═══ -->
+<div id="capsuleScreen" class="screen">
+  <div class="entry-header">
+    <button class="back-btn" onclick="switchTab('settings')">←</button>
+    <div class="entry-date-display">
+      <div class="entry-date-num" style="font-size:22px">💌</div>
+      <div class="entry-date-sub">秘密膠囊</div>
+    </div>
+  </div>
+  <div class="capsule-body" id="capsuleBody">
+    <!-- Capsule list injected by JS -->
+  </div>
+</div>
+
+<!-- ═══ CAPSULE FORM SHEET ═══ -->
+<div id="capsuleFormBg" onclick="if(event.target===this)closeCapsuleForm()">
+  <div class="capsule-form-sheet">
+    <div class="capsule-form-title">✉️ 建立時光膠囊</div>
+    <div class="capsule-form-sub">寫下現在的心情，等待未來的自己開啟</div>
+
+    <div class="capsule-field-label">寫給未來的話</div>
+    <textarea class="capsule-textarea" id="capsuleNoteInput" placeholder="親愛的未來自己，此刻我想對你說…"></textarea>
+
+    <div class="capsule-field-label">附上一張照片（選填）</div>
+    <div class="capsule-photo-zone" id="capsulePhotoZone" onclick="document.getElementById('capsulePhotoInput').click()">
+      <div id="capsulePhotoPlaceholder">
+        <div class="capsule-photo-placeholder">📷</div>
+        <div class="capsule-photo-label">點擊上傳照片</div>
+      </div>
+      <img id="capsulePhotoPreview" style="display:none">
+    </div>
+    <input type="file" id="capsulePhotoInput" accept="image/*" style="display:none" onchange="handleCapsulePhoto(event)">
+
+    <div class="capsule-field-label">開啟條件</div>
+    <div class="capsule-unlock-opts">
+      <div class="capsule-unlock-opt active" id="capsuleOptDate" onclick="setCapsuleUnlockType('date')">📅 特定日期</div>
+      <div class="capsule-unlock-opt" id="capsuleOptCount" onclick="setCapsuleUnlockType('count')">📖 篇數達成</div>
+    </div>
+
+    <div id="capsuleDateField">
+      <div class="capsule-field-label">開啟日期</div>
+      <input type="date" class="capsule-date-input" id="capsuleDateInput">
+    </div>
+    <div id="capsuleCountField" style="display:none">
+      <div class="capsule-field-label" style="margin-bottom:4px">日記累積篇數達到 50 篇時自動開啟</div>
+      <div style="font-family:'Noto Sans TC',sans-serif;font-size:11px;color:var(--muted);margin-bottom:14px">目前已累積 <span id="capsuleCurrentCount">0</span> 篇</div>
+    </div>
+
+    <button class="capsule-submit-btn" onclick="saveCapsule()">封存膠囊 ✉️</button>
+  </div>
+</div>
+
+<!-- ═══ CAPSULE SEALED MODAL ═══ -->
+<div id="capsuleSealedModal" onclick="if(event.target===this)closeSealedModal()">
+  <div class="capsule-sealed-box">
+    <div class="capsule-sealed-icon">💌</div>
+    <div class="capsule-sealed-msg">時光正在發酵中，<br>請耐心等待。</div>
+    <div class="capsule-sealed-sub" id="capsuleSealedSubText">再等一段時間，<br>這份驚喜就會屬於你。</div>
+    <button class="capsule-sealed-ok" onclick="closeSealedModal()">好的，我會等待 ✨</button>
+  </div>
+</div>
+
+<!-- ═══ FUTURE GIFT / MEMORY RECALL ═══ -->
+<div id="giftOverlay" onclick="if(event.target===this)closeGift()">
+  <div class="gift-sheet">
+    <div class="gift-header-bar">
+      <div class="gift-tag" id="giftTag">🎁 &nbsp;未來的禮物</div>
+      <div class="gift-headline" id="giftHeadline"></div>
+    </div>
+    <div id="giftPhotoSection" style="display:none">
+      <div class="gift-photo-wrap">
+        <img class="gift-photo" id="giftPhoto" src="" alt="">
+        <div class="gift-days-badge" id="giftDaysBadge"></div>
+      </div>
+    </div>
+    <div id="giftNoteSection"></div>
+    <div class="gift-actions">
+      <button class="gift-btn secondary" onclick="closeGift()">💝 收下禮物</button>
+      <button class="gift-btn primary" id="giftRevisitBtn" onclick="revisitGift()">📖 重溫日記</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LEGO COLLECTION SCREEN ═══ -->
+<div id="collectionScreen" class="screen">
+  <div class="collection-header">
+    <div class="collection-title">🧱 我的圖鑑</div>
+    <div class="collection-sub">拼滿每一格，解鎖你的收集成就</div>
+  </div>
+  <div id="collectionBody" style="padding:8px 10px 16px;flex:1;overflow-y:auto"></div>
+</div>
+
+<!-- ═══ CONFETTI OVERLAY ═══ -->
+<div id="confettiOverlay"></div>
+
+<!-- ═══ LEGO CANVAS FULLSCREEN ═══ -->
+<div id="legoCanvas" style="display:none;position:fixed;inset:0;z-index:9500;background:#2c1f0e;flex-direction:column;align-items:center;justify-content:center">
+  <div id="legoCanvasInner" style="width:100%;max-width:430px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative">
+    <button onclick="closeLegoCanvas()" style="position:absolute;top:52px;right:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:18px;width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10">✕</button>
+    <div id="legoCanvasTitle" style="position:absolute;top:52px;left:16px;color:rgba(255,255,255,.7);font-family:'Noto Sans TC',sans-serif;font-size:11px;letter-spacing:2px"></div>
+    <div id="legoGrid" style="position:relative;padding:8px"></div>
+    <div id="legoProgress" style="position:absolute;bottom:80px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.55);font-family:'Noto Sans TC',sans-serif;font-size:11px;letter-spacing:1px;text-align:center"></div>
+  </div>
+</div>
+
+<!-- ═══ TAB BAR ═══ -->
+<div class="tab-bar">
+  <button class="tab-item active" id="tab-cal"        onclick="switchTab('cal')"><span class="tab-icon">📅</span><span class="tab-label">日記</span></button>
+  <button class="tab-item"        id="tab-sticker"    onclick="switchTab('sticker')"><span class="tab-icon">✂️</span><span class="tab-label">貼紙工坊</span></button>
+  <button class="tab-item"        id="tab-settings"   onclick="switchTab('settings')"><span class="tab-icon">⚙️</span><span class="tab-label">設定</span></button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+<script>
+/* Nikki v4 — Privacy-first, IndexedDB (via localForage). 開發者不收集任何資料。 */
+
+// ── CONSTANTS ────────────────────────────────────────
+const STORAGE_KEY='nikki_v4';
+const MONTHS_ZH=['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+const MONTHS_S=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+const WDAYS_ZH=['日','一','二','三','四','五','六'];
+const PALETTE=['#d4857a','#8fa882','#7fa3b8','#c4a07a','#9b86bd','#b5a8a0','#7aabab','#c9a96e'];
+
+// ── STATE ────────────────────────────────────────────
+const today=new Date();
+let currentYear=today.getFullYear(), currentMonth=today.getMonth();
+let currentView='month', currentCalId=null;
+let selectedDate=null, sortOrder='new', activeTab='cal';
+let modalMode=null, modalCalIdx=null, modalColor=PALETTE[0];
+let stickerShapeMode='circle', pendingStickerDataUrl=null;
+// Calendar canvas sticker mode
+let calCanvasMode=false;
+let calZCounter=100, calSelectedStickerEl=null;
+// Carousel
+let activeSlideIdx=0;
+let entryPhotos=[]; // [{id,dataUrl,isFavorite,stickers:[]}]
+
+// ── STORE ─────────────────────────────────────────────
+// entries: { calId: { 'y-m-d': { photos:[{id,dataUrl,isFavorite,stickers}], note, font, calStickers:[...] } } }
+// calStickers on calendar-level (per cal+month): store.calMonthStickers['calId_year_month'] = [{...}]
+
+// ── STORAGE (IndexedDB via localForage) ───────────────────────────
+// localForage auto-picks IndexedDB → WebSQL → localStorage as fallback.
+// No 5 MB cap. Async API wrapped in thin helpers so the rest of the app
+// can call  saveStore()  anywhere without awaiting (fire-and-forget is safe).
+
+localforage.config({name:'nikki', storeName:'data', version:1});
+
+const STORE_IDB_KEY = 'nikki_store_v4';
+
+let store = null;           // populated by initStore() before any UI renders
+let _savePending = false;   // debounce: coalesce rapid saves into one write
+
+function saveStore(){
+  // Debounce: schedule one write per animation frame burst
+  if(_savePending) return;
+  _savePending = true;
+  setTimeout(async ()=>{
+    _savePending = false;
+    try{
+      await localforage.setItem(STORE_IDB_KEY, store);
+    }catch(e){
+      showToast('儲存失敗：' + (e.message||e));
+    }
+  }, 80);
+}
+
+async function initStore(){
+  // ── Step 1: try IndexedDB ──
+  let saved = null;
+  try{ saved = await localforage.getItem(STORE_IDB_KEY); }catch(e){}
+
+  // ── Step 2: migrate from localStorage if IDB is empty ──
+  if(!saved){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        saved = JSON.parse(raw);
+        await localforage.setItem(STORE_IDB_KEY, saved);
+        localStorage.removeItem(STORAGE_KEY);   // clean up old copy
+      }
+    }catch(e){}
+  }
+
+  // ── Step 3: build default store if nothing found ──
+  if(!saved || !saved.cals){
+    saved = {
+      cals:[{id:'cal1',name:'我的日記',color:'#d4857a'}],
+      entries:{cal1:{}},
+      customStickers:[],
+      calMonthStickers:{},
+      time_capsules:[],
+      settings:{theme:'warm',notifOn:false,notifTime:'21:00'},
+      seedCleaned:true
+    };
+  }
+
+  // ── Step 4: guards for older schema versions ──
+  if(!saved.customStickers)   saved.customStickers  = [];
+  if(!saved.calMonthStickers) saved.calMonthStickers = {};
+  if(!saved.time_capsules)    saved.time_capsules    = [];
+  if(!saved.gift_seen)        saved.gift_seen        = {}; // key→ISO date last shown
+  if(!saved.lego_dates)       saved.lego_dates       = {}; // dateKey→true
+  if(!saved.settings)         saved.settings = {theme:'warm',notifOn:false,notifTime:'21:00'};
+  saved.cals.forEach(c=>{ if(!saved.entries[c.id]) saved.entries[c.id]={}; });
+
+  // ── Step 5: one-time seed-sticker cleanup ──
+  if(!saved.seedCleaned){
+    saved.customStickers = [];
+    saved.seedCleaned = true;
+  }
+
+  store = saved;
+  currentCalId = store.cals[0].id;
+}
+
+function diary(){return store.entries[currentCalId]}
+function dateKey(y,m,d){return `${y}-${m}-${d}`}
+function calMonthKey(){return `${currentCalId}_${currentYear}_${currentMonth}`}
+
+// ── ACCENT / THEME ───────────────────────────────────
+function applyAccent(color){
+  const r=document.documentElement;
+  r.style.setProperty('--cal-accent',color);
+  const hex=color.slice(1);
+  const rv=parseInt(hex.slice(0,2),16),gv=parseInt(hex.slice(2,4),16),bv=parseInt(hex.slice(4,6),16);
+  r.style.setProperty('--cal-accent-soft',`rgba(${rv},${gv},${bv},0.18)`);
+}
+function setTheme(t){
+  document.documentElement.setAttribute('data-theme',t==='warm'?'':t);
+  store.settings.theme=t; saveStore();
+  ['warm','light','dark'].forEach(k=>document.getElementById('theme'+k[0].toUpperCase()+k.slice(1))?.classList.toggle('active',k===t));
+}
+
+// ── TABS ─────────────────────────────────────────────
+function switchTab(tab){
+  activeTab=tab;
+  const map={cal:'calScreen',sticker:'stickerScreen',settings:'settingsScreen',capsule:'capsuleScreen',collection:'collectionScreen'};
+  document.querySelectorAll('.screen').forEach(s=>{if(s.id==='entryScreen')return;s.classList.remove('active')});
+  document.getElementById(map[tab])?.classList.add('active');
+  document.querySelectorAll('.tab-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+tab)?.classList.add('active');
+  if(tab==='cal') renderCalendar();
+  if(tab==='sticker'){renderMyStickers()}
+  if(tab==='settings') renderSettings();
+  if(tab==='capsule') renderCapsules();
+  if(tab==='collection') renderCollection();
+}
+
+// ── CAL TABS ─────────────────────────────────────────
+function renderTabs(){
+  const sw=document.getElementById('calSwitcher'); sw.innerHTML='';
+  store.cals.forEach((cal,idx)=>{
+    const btn=document.createElement('button');
+    btn.className='cal-tab'+(cal.id===currentCalId?' active':'');
+    btn.textContent=cal.name;
+    btn.onclick=()=>{ if(btn.querySelector('input')) return; switchCal(cal.id); };
+    // Long-press (mobile) → modal rename
+    let pt; btn.addEventListener('pointerdown',()=>{pt=setTimeout(()=>openModal('rename',idx),520)});
+    btn.addEventListener('pointerup',()=>clearTimeout(pt));
+    btn.addEventListener('pointerleave',()=>clearTimeout(pt));
+    // Double-click → inline rename input
+    btn.addEventListener('dblclick',e=>{
+      e.stopPropagation(); e.preventDefault(); clearTimeout(pt);
+      const inp=document.createElement('input');
+      inp.value=cal.name; inp.maxLength=12;
+      inp.style.cssText='width:100%;border:none;background:transparent;font:inherit;color:inherit;text-align:center;outline:none;';
+      btn.textContent=''; btn.appendChild(inp);
+      requestAnimationFrame(()=>{ inp.focus(); inp.select(); });
+      let committed=false;
+      const commit=()=>{
+        if(committed) return; committed=true;
+        const v=inp.value.trim()||cal.name;
+        store.cals[idx].name=v; saveStore(); renderTabs();
+      };
+      inp.addEventListener('blur',commit);
+      inp.addEventListener('keydown',ev=>{if(ev.key==='Enter'){inp.blur()}if(ev.key==='Escape'){inp.value=cal.name;inp.blur()}});
+    });
+    sw.appendChild(btn);
+  });
+  const ab=document.createElement('button');
+  ab.className='cal-tab-add'+(store.cals.length>=2?' hidden':'');
+  ab.textContent='+'; ab.onclick=()=>openModal('create',null);
+  sw.appendChild(ab);
+}
+function switchCal(id){
+  currentCalId=id; currentYear=today.getFullYear(); currentMonth=today.getMonth();
+  const cal=store.cals.find(c=>c.id===id);
+  if(cal) applyAccent(cal.color);
+  renderTabs(); renderCalendar();
+}
+
+// ── MODAL ─────────────────────────────────────────────
+function openModal(mode,calIdx){
+  modalMode=mode; modalCalIdx=calIdx;
+  const title=document.getElementById('modalTitle'), input=document.getElementById('modalInput');
+  if(mode==='rename'){title.textContent='重命名日曆';input.value=store.cals[calIdx].name;modalColor=store.cals[calIdx].color}
+  else{title.textContent='建立新日曆';input.value='';modalColor=PALETTE[1]}
+  renderSwatches(); document.getElementById('modalBg').classList.add('open');
+  setTimeout(()=>input.focus(),100);
+}
+function closeModal(){document.getElementById('modalBg').classList.remove('open')}
+function renderSwatches(){
+  const row=document.getElementById('swatchRow'); row.innerHTML='';
+  PALETTE.forEach(c=>{
+    const s=document.createElement('div');
+    s.className='swatch'+(c===modalColor?' selected':'');
+    s.style.background=c; s.onclick=()=>{modalColor=c;renderSwatches()};
+    row.appendChild(s);
+  });
+}
+function confirmModal(){
+  const name=document.getElementById('modalInput').value.trim()||'日曆';
+  if(modalMode==='rename'){
+    store.cals[modalCalIdx].name=name; store.cals[modalCalIdx].color=modalColor;
+    if(store.cals[modalCalIdx].id===currentCalId) applyAccent(modalColor);
+  } else {
+    const newId='cal_'+Date.now();
+    store.cals.push({id:newId,name,color:modalColor});
+    store.entries[newId]={}; currentCalId=newId; applyAccent(modalColor);
+  }
+  saveStore(); closeModal(); renderTabs(); renderCalendar();
+}
+
+// ── VIEW SWITCH ──────────────────────────────────────
+function setView(v){
+  currentView=v;
+  // Reset lazy-load observer when leaving year view
+  if(_miniObserver){ _miniObserver.disconnect(); _miniObserver=null; }
+  document.getElementById('viewMonthBtn').classList.toggle('active',v==='month');
+  document.getElementById('viewYearBtn').classList.toggle('active',v==='year');
+  document.getElementById('weekdayRow').style.display=v==='month'?'':'none';
+  document.getElementById('calCanvasWrap').style.display=v==='month'?'':'none';
+  document.getElementById('yearView').style.display=v==='year'?'':'none';
+  document.getElementById('navPrev').classList.toggle('hide',v==='year');
+  document.getElementById('navNext').classList.toggle('hide',v==='year');
+  document.getElementById('calCanvasToggle').style.display=v==='year'?'none':'';
+  document.getElementById('legoProgressBtn').style.display=v==='year'?'none':'';
+  document.getElementById('myCollectionBtn').style.display=v==='year'?'':'none';
+  renderCalendar();
+}
+function navigate(dir){
+  if(currentView==='month'){
+    currentMonth+=dir;
+    if(currentMonth>11){currentMonth=0;currentYear++}
+    if(currentMonth<0){currentMonth=11;currentYear--}
+  } else {
+    // In year view, prev/next shifts the displayed year
+    currentYear+=dir;
+  }
+  renderCalendar();
+}
+
+// ── YEAR PICKER ───────────────────────────────────────
+function openYearPicker(){
+  const thisYear=today.getFullYear();
+  // Show a range: 5 years back → 5 years ahead (12 options, 3 rows of 4)
+  const years=[];
+  for(let y=thisYear-10;y<=thisYear+10;y++) years.push(y);
+
+  const grid=document.getElementById('yearPickerGrid');
+  grid.innerHTML='';
+  years.forEach(y=>{
+    const btn=document.createElement('button');
+    btn.className='year-opt'
+      +(y===currentYear?' selected':'')
+      +(y===thisYear?' current-year':'');
+    btn.textContent=y;
+    btn.onclick=()=>selectYear(y);
+    grid.appendChild(btn);
+  });
+  document.getElementById('yearPickerBg').classList.add('open');
+}
+function closeYearPicker(){
+  document.getElementById('yearPickerBg').classList.remove('open');
+}
+function selectYear(y){
+  currentYear=y;
+  closeYearPicker();
+  // If in year view, just re-render; if in month view keep current month
+  renderCalendar();
+  if(currentView==='month') renderFeed();
+}
+
+// ── CALENDAR RENDER ───────────────────────────────────
+function renderCalendar(){
+  // Year label: always shows currentYear (tappable); hidden text when in year view
+  document.getElementById('calYearLabel').textContent=currentYear;
+  document.getElementById('calMonthName').textContent=currentView==='year'
+    ? currentYear+'年'
+    : MONTHS_ZH[currentMonth];
+  // Feed title reflects selected year+month
+  document.getElementById('feedTitle').textContent=
+    currentYear===today.getFullYear()
+      ? '本月紀錄'
+      : `${currentYear} 年紀錄`;
+  const feedSection=document.querySelector('.feed-section');
+  if(feedSection) feedSection.style.display=currentView==='year'?'none':'flex';
+  if(currentView==='month') renderMonthView(); else renderYearView();
+  if(currentView==='month'){ renderFeed(); renderCalStickers(); }
+}
+
+function renderMonthView(){
+  const grid=document.getElementById('calGrid'); grid.innerHTML='';
+  const fd=new Date(currentYear,currentMonth,1).getDay();
+  const dm=new Date(currentYear,currentMonth+1,0).getDate();
+  for(let i=0;i<fd;i++){const e=document.createElement('div');e.className='day-cell empty';grid.appendChild(e)}
+  for(let d=1;d<=dm;d++){
+    const key=dateKey(currentYear,currentMonth,d);
+    const entry=diary()[key];
+    const isToday=d===today.getDate()&&currentMonth===today.getMonth()&&currentYear===today.getFullYear();
+    // Use composite thumbnail (with stickers baked in) if available, else raw first photo
+    const coverPhoto=entry?.thumbnailUrl || entry?.photos?.[0]?.dataUrl || entry?.photo || null;
+    const hasMulti=(entry?.photos?.length||0)>1;
+    const cell=document.createElement('div');
+    cell.className='day-cell'+(isToday?' today':'')+(coverPhoto?' has-photo':'')+(hasMulti?' multi-photo':'');
+    cell.style.animationDelay=`${(d+fd)*15}ms`;
+    if(coverPhoto){const img=document.createElement('img');img.className='day-photo';img.src=coverPhoto;cell.appendChild(img)}
+    const num=document.createElement('div');num.className='day-num';num.textContent=d;cell.appendChild(num);
+    cell.onclick=()=>{ if(!calCanvasMode) openEntry(currentYear,currentMonth,d) };
+    grid.appendChild(cell);
+  }
+}
+
+function renderYearView(){
+  const view=document.getElementById('yearGrid'); view.innerHTML='';
+
+  // Pre-collect all entries that have photos for this year (avoid per-cell diary() lookups)
+  const d=diary();
+  const photoMap={}; // key → thumbnail url (low-res)
+  Object.keys(d).forEach(key=>{
+    const entry=d[key];
+    const thumb=entry?.thumbnailUrl || entry?.photos?.[0]?.dataUrl || entry?.photo || null;
+    if(thumb) photoMap[key]=thumb;
+  });
+
+  for(let m=0;m<12;m++){
+    const mini=document.createElement('div');
+    mini.className='month-mini'+(m===today.getMonth()&&currentYear===today.getFullYear()?' current-month':'');
+    mini.style.animationDelay=`${m*25}ms`;
+
+    const nm=document.createElement('div');
+    nm.className='month-mini-name';
+    nm.textContent=MONTHS_S[m];
+    mini.appendChild(nm);
+
+    const mg=document.createElement('div');
+    mg.className='month-mini-grid';
+    const fd=new Date(currentYear,m,1).getDay();
+    const dm=new Date(currentYear,m+1,0).getDate();
+
+    // Empty offset cells
+    for(let i=0;i<fd;i++){
+      const ec=document.createElement('div');
+      ec.className='mini-cell empty-cell';
+      mg.appendChild(ec);
+    }
+
+    for(let day=1;day<=dm;day++){
+      const key=dateKey(currentYear,m,day);
+      const isT=day===today.getDate()&&m===today.getMonth()&&currentYear===today.getFullYear();
+      const thumb=photoMap[key]||null;
+
+      const mc=document.createElement('div');
+      mc.className='mini-cell'+(isT?' today-cell':'');
+
+      if(thumb){
+        // Lazy-load via IntersectionObserver to avoid painting 365 imgs at once
+        mc.dataset.thumb=thumb;
+        mc.classList.add('has-photo');
+        lazyLoadMiniCell(mc);
+      }
+
+      mg.appendChild(mc);
+    }
+
+    mini.appendChild(mg);
+    mini.onclick=()=>{currentMonth=m;setView('month')};
+    view.appendChild(mini);
+  }
+}
+
+// IntersectionObserver pool — shared for all mini-cells
+let _miniObserver=null;
+function lazyLoadMiniCell(cell){
+  if(!_miniObserver){
+    _miniObserver=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        if(!entry.isIntersecting)return;
+        const el=entry.target;
+        const src=el.dataset.thumb;
+        if(src&&!el.querySelector('.mini-cell-img')){
+          const img=document.createElement('img');
+          img.className='mini-cell-img';
+          img.decoding='async';
+          img.src=src;
+          el.appendChild(img);
+        }
+        _miniObserver.unobserve(el);
+      });
+    },{rootMargin:'120px'});
+  }
+  _miniObserver.observe(cell);
+}
+
+// ══════════════════════════════════════
+// CALENDAR CANVAS STICKERS
+// ══════════════════════════════════════
+function toggleCalCanvas(){
+  calCanvasMode=!calCanvasMode;
+  const layer=document.getElementById('calStickerLayer');
+  const btn=document.getElementById('calCanvasToggle');
+  const grid=document.getElementById('calGrid');
+  const panel=document.getElementById('calCustomStickerPanel');
+  layer.classList.toggle('editable',calCanvasMode);
+  btn.classList.toggle('on',calCanvasMode);
+  btn.textContent=calCanvasMode?'✅ 完成':'✏️ 貼紙模式';
+  grid.style.pointerEvents=calCanvasMode?'none':'';
+  // Show/hide custom sticker panel
+  if(calCanvasMode){
+    panel.style.display='';
+    buildCalCustomStickerStrip();
+  } else {
+    panel.style.display='none';
+    calDeselectAll();
+    persistCalStickers();showToast('日曆貼紙已儲存');
+  }
+}
+
+function buildCalCustomStickerStrip(){
+  const strip=document.getElementById('calCustomStickerStrip');
+  const panel=document.getElementById('calCustomStickerPanel');
+  strip.innerHTML='';
+  if(!store.customStickers.length){panel.style.display='none';return}
+  panel.style.display='';
+  store.customStickers.forEach(cs=>{
+    const btn=document.createElement('button');
+    btn.className='sticker-btn custom-sticker'+(cs.shape==='rect'?' rect':'');
+    btn.innerHTML=`<img src="${cs.dataUrl}" alt="">`;
+    btn.onclick=()=>addCalCustomSticker(cs);
+    strip.appendChild(btn);
+  });
+}
+
+function renderCalStickers(){
+  const layer=document.getElementById('calStickerLayer'); layer.innerHTML='';
+  calZCounter=100; calSelectedStickerEl=null;
+  const data=store.calMonthStickers[calMonthKey()]||[];
+  data.forEach(s=>placeCalStickerFromData(s));
+}
+
+function addCalSticker(emoji){
+  if(!calCanvasMode){showToast('請先開啟貼紙模式');return}
+  const layer=document.getElementById('calStickerLayer');
+  const rect=layer.getBoundingClientRect();
+  const w=rect.width||300, h=rect.height||300;
+  const data={
+    id:'cst_'+Date.now()+'_'+Math.random().toString(36).slice(2),
+    type:'emoji', src:emoji,
+    x:30+Math.random()*(w-80), y:30+Math.random()*(h-80),
+    rot:(Math.random()-.5)*30, scale:1, z:++calZCounter
+  };
+  placeCalStickerFromData(data);
+  persistCalStickers();
+}
+function addCalCustomSticker(cs){
+  if(!calCanvasMode){showToast('請先開啟貼紙模式');return}
+  const layer=document.getElementById('calStickerLayer');
+  const rect=layer.getBoundingClientRect();
+  const w=rect.width||300, h=rect.height||300;
+  const data={
+    id:'cst_'+Date.now()+'_'+Math.random().toString(36).slice(2),
+    type:'custom', src:cs.dataUrl, shape:cs.shape||'circle',
+    x:30+Math.random()*(w-100), y:30+Math.random()*(h-100),
+    rot:(Math.random()-.5)*20, scale:1, z:++calZCounter
+  };
+  placeCalStickerFromData(data);
+  persistCalStickers();
+}
+
+function placeCalStickerFromData(data){
+  const layer=document.getElementById('calStickerLayer'); if(!layer)return;
+  const el=document.createElement('div');
+  el.className='cal-ps'+(data.type==='emoji'?' cal-ps-emoji':' cal-ps-photo'+(data.shape==='rect'?' rect':''));
+  el.dataset.sid=data.id;
+  if(data.type==='emoji'){el.textContent=data.src}
+  else{const img=document.createElement('img');img.src=data.src;img.draggable=false;el.appendChild(img)}
+  const delBtn=document.createElement('div');
+  delBtn.className='cal-ps-delete';delBtn.textContent='✕';
+  delBtn.onclick=e=>{e.stopPropagation();el.remove();persistCalStickers();calDeselectAll()};
+  el.appendChild(delBtn);
+
+  let posX=data.x,posY=data.y,rot=data.rot||0,scale=data.scale||1;
+  const applyT=()=>{el.style.left=posX+'px';el.style.top=posY+'px';el.style.zIndex=data.z||++calZCounter;el.style.transform=`rotate(${rot}deg) scale(${scale})`};
+  applyT();
+
+  const selThis=()=>{calDeselectAll();el.classList.add('cal-ps-selected');calSelectedStickerEl=el;el.style.zIndex=++calZCounter;haptic()};
+
+  el.addEventListener('mousedown',e=>{
+    if(!calCanvasMode)return; selThis(); e.stopPropagation();
+    let sx=e.clientX,sy=e.clientY,sl=posX,st=posY;
+    const mv=ev=>{posX=sl+(ev.clientX-sx);posY=st+(ev.clientY-sy);applyT()};
+    const up=()=>{persistCalStickers();document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up)};
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+  el.addEventListener('touchstart',e=>{
+    if(!calCanvasMode)return; selThis(); e.stopPropagation();
+    if(e.touches.length===1){
+      let sx=e.touches[0].clientX,sy=e.touches[0].clientY,sl=posX,st=posY;
+      const mv=ev=>{if(ev.touches.length!==1)return;if(ev.cancelable)ev.preventDefault();posX=sl+(ev.touches[0].clientX-sx);posY=st+(ev.touches[0].clientY-sy);applyT()};
+      const up=()=>{persistCalStickers();document.removeEventListener('touchmove',mv);document.removeEventListener('touchend',up)};
+      document.addEventListener('touchmove',mv,{passive:false}); document.addEventListener('touchend',up);
+    }
+    if(e.touches.length===2){
+      const t1=e.touches[0],t2=e.touches[1];
+      const id=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
+      const ia=Math.atan2(t2.clientY-t1.clientY,t2.clientX-t1.clientX)*180/Math.PI;
+      const is=scale,ir=rot;
+      const mv=ev=>{if(ev.touches.length<2)return;if(ev.cancelable)ev.preventDefault();const a=ev.touches[0],b=ev.touches[1];const d=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);scale=Math.min(4,Math.max(.25,is*(d/id)));rot=ir+(Math.atan2(b.clientY-a.clientY,b.clientX-a.clientX)*180/Math.PI-ia);applyT()};
+      const up=()=>{persistCalStickers();document.removeEventListener('touchmove',mv);document.removeEventListener('touchend',up)};
+      document.addEventListener('touchmove',mv,{passive:false}); document.addEventListener('touchend',up);
+    }
+  },{passive:true});
+
+  let lt=0;
+  el.addEventListener('touchend',()=>{const n=Date.now();if(n-lt<280){el.remove();persistCalStickers();calDeselectAll()}lt=n});
+  el.addEventListener('dblclick',()=>{el.remove();persistCalStickers();calDeselectAll()});
+  layer.appendChild(el);
+}
+
+function calDeselectAll(){document.querySelectorAll('.cal-ps.cal-ps-selected').forEach(e=>e.classList.remove('cal-ps-selected'));calSelectedStickerEl=null}
+function persistCalStickers(){
+  const stickers=[];
+  document.querySelectorAll('#calStickerLayer .cal-ps').forEach(el=>{
+    const tf=el.style.transform;
+    const rM=tf.match(/rotate\(([-\d.]+)deg\)/), sM=tf.match(/scale\(([-\d.]+)\)/);
+    stickers.push({id:el.dataset.sid||('cst_'+Date.now()),type:el.classList.contains('cal-ps-photo')?'custom':'emoji',src:el.classList.contains('cal-ps-photo')?(el.querySelector('img')?.src||''):(el.childNodes[0]?.textContent||''),shape:el.classList.contains('rect')?'rect':'circle',x:parseFloat(el.style.left)||0,y:parseFloat(el.style.top)||0,rot:rM?parseFloat(rM[1]):0,scale:sM?parseFloat(sM[1]):1,z:parseInt(el.style.zIndex)||100});
+  });
+  store.calMonthStickers[calMonthKey()]=stickers; saveStore();
+}
+
+// ══════════════════════════════════════
+// FEED
+// ══════════════════════════════════════
+function setSort(o){sortOrder=o;document.getElementById('sortNewBtn').classList.toggle('active',o==='new');document.getElementById('sortOldBtn').classList.toggle('active',o==='old');renderFeed()}
+function renderFeed(){
+  const list=document.getElementById('feedList'); list.innerHTML='';
+  let entries=[];
+  const collect=(y,m)=>{const dm=new Date(y,m+1,0).getDate();for(let d=1;d<=dm;d++){const key=dateKey(y,m,d);const entry=diary()[key];if(entry&&(entry.note||entry.photos?.length||entry.photo||entry.stickers?.length))entries.push({y,m,d,entry})}};
+  collect(currentYear,currentMonth);
+  if(!entries.length){list.innerHTML=`<div class="feed-empty">還沒有紀錄，點擊日期開始吧 ✨</div>`;return}
+  const sorted=sortOrder==='new'?[...entries].reverse():entries;
+  sorted.forEach(({y,m,d,entry},idx)=>{
+    // Swipe wrapper
+    const wrap=document.createElement('div');
+    wrap.className='feed-swipe-wrap';
+    wrap.style.animationDelay=`${idx*28}ms`;
+
+    // Hidden delete button
+    const delBtn=document.createElement('div');
+    delBtn.className='feed-delete-btn';
+    delBtn.innerHTML=`<span class="del-icon">🗑</span><span>刪除</span>`;
+    delBtn.onclick=e=>{e.stopPropagation();deleteFeedEntry(y,m,d,wrap)};
+    wrap.appendChild(delBtn);
+
+    // Feed card
+    const item=document.createElement('div'); item.className='feed-item';
+    const dt=new Date(y,m,d);
+    const dateStr=`${y} · ${MONTHS_ZH[m]} ${d}日 · 週${WDAYS_ZH[dt.getDay()]}`;
+    const cover=entry.thumbnailUrl||entry.photos?.[0]?.dataUrl||entry.photo||null;
+    const thumb=cover?`<img class="feed-thumb" src="${cover}" alt="">`:`<div class="feed-thumb-empty">📝</div>`;
+    const photoCount=(entry.photos?.length||0)>1?`<span style="font-size:10px;color:var(--muted)"> · ${entry.photos.length}張</span>`:'';
+    const favCount=(entry.photos||[]).filter(p=>p.isFavorite).length;
+    const favBadge=favCount?`<span style="font-size:11px"> ❤️ ${favCount}</span>`:'';
+    const noteText=entry.note?entry.note.replace(/\n/g,' ').trim():'';
+    const note=noteText?noteText.slice(0,36)+(noteText.length>36?'…':''):'';
+    // Always render a note line — placeholder keeps two-line height consistent
+    const noteHtml=note
+      ?`<div class="feed-note">${note}</div>`
+      :`<div class="feed-note-empty">尚無文字記錄</div>`;
+    item.innerHTML=`${thumb}<div class="feed-meta"><div class="feed-date">${dateStr}${photoCount}${favBadge}</div>${noteHtml}</div>`;
+    item.onclick=()=>{if(wrap.classList.contains('swiped')){wrap.classList.remove('swiped')}else{openEntry(y,m,d)}};
+    wrap.appendChild(item);
+
+    setupFeedSwipe(wrap);
+    list.appendChild(wrap);
+  });
+}
+
+function setupFeedSwipe(wrap){
+  const item=wrap.querySelector('.feed-item');
+  const REVEAL=80;
+  let startX=0,startY=0,active=false,lockAxis=null,pointerType='';
+
+  const onStart=(clientX,clientY,type)=>{
+    startX=clientX; startY=clientY;
+    active=true; lockAxis=null; pointerType=type;
+  };
+  const onMove=(clientX,clientY)=>{
+    if(!active)return;
+    const dx=clientX-startX, dy=clientY-startY;
+    if(!lockAxis) lockAxis=Math.abs(dx)>Math.abs(dy)?'x':'y';
+    if(lockAxis==='y'){active=false;return}
+    const base=wrap.classList.contains('swiped')?-REVEAL:0;
+    const offset=Math.max(-REVEAL,Math.min(0,base+dx));
+    item.style.transition='none';
+    item.style.transform=`translateX(${offset}px)`;
+  };
+  const onEnd=(clientX)=>{
+    if(!active)return; active=false;
+    item.style.transition='';
+    item.style.transform='';
+    const dx=clientX-startX;
+    if(dx<-36) wrap.classList.add('swiped');
+    else if(dx>20) wrap.classList.remove('swiped');
+  };
+
+  // Touch
+  item.addEventListener('touchstart',e=>{onStart(e.touches[0].clientX,e.touches[0].clientY,'touch')},{passive:true});
+  item.addEventListener('touchmove',e=>{
+    onMove(e.touches[0].clientX,e.touches[0].clientY);
+    if(lockAxis==='x'&&e.cancelable)e.preventDefault();
+  },{passive:false});
+  item.addEventListener('touchend',e=>{onEnd(e.changedTouches[0].clientX)},{passive:true});
+
+  // Mouse (desktop)
+  item.addEventListener('mousedown',e=>{if(e.button!==0)return;onStart(e.clientX,e.clientY,'mouse');e.preventDefault()});
+  document.addEventListener('mousemove',e=>{if(pointerType==='mouse')onMove(e.clientX,e.clientY)});
+  document.addEventListener('mouseup',e=>{if(pointerType==='mouse'){onEnd(e.clientX);pointerType=''}});
+
+  // Tap elsewhere closes swipe
+  document.addEventListener('touchstart',e=>{
+    if(wrap.classList.contains('swiped')&&!wrap.contains(e.target)){
+      wrap.classList.remove('swiped');
+    }
+  },{passive:true});
+}
+
+// ── DELETE ENTIRE ENTRY (with collapse animation) ─────
+function deleteFeedEntry(y,m,d,wrapEl){
+  const _doDelete=()=>{
+    const key=dateKey(y,m,d);
+    delete diary()[key];
+    // ── Cascade: recompute unlock for that month ──
+    const _kparts=key.split('-');
+    legoRecomputeMonth(parseInt(_kparts[0]),parseInt(_kparts[1]));
+    saveStore();
+    renderCalendar();
+    haptic();
+  };
+  if(wrapEl){
+    wrapEl.classList.add('deleting');
+    setTimeout(_doDelete, 320);
+  } else {
+    _doDelete();
+  }
+}
+// Legacy alias kept for any residual call
+function deleteEntry(y,m,d){ deleteFeedEntry(y,m,d,null); }
+
+// ── QUICK ADD: open today's entry ─────────────────────
+function openTodayEntry(){
+  openEntry(today.getFullYear(),today.getMonth(),today.getDate());
+}
+
+// ══════════════════════════════════════
+// ENTRY SCREEN — multi-photo + carousel + favorites
+// ══════════════════════════════════════
+function openEntry(y,m,d){
+  selectedDate={y,m,d};
+  const key=dateKey(y,m,d);
+  let entry=diary()[key]||{};
+  // Migrate legacy single photo
+  if(entry.photo && !entry.photos){entry.photos=[{id:'ph_0',dataUrl:entry.photo,isFavorite:false,stickers:entry.stickers||[]}];delete entry.photo;delete entry.stickers}
+  if(!entry.photos) entry.photos=[];
+  diary()[key]=entry;
+
+  entryPhotos=[...entry.photos]; // working copy
+  activeSlideIdx=0;
+
+  document.getElementById('entryDateNum').textContent=d;
+  const dt=new Date(y,m,d);
+  document.getElementById('entryDateSub').textContent=`${y} · ${MONTHS_ZH[m]} · 星期${WDAYS_ZH[dt.getDay()]}`;
+  const cal=store.cals.find(c=>c.id===currentCalId);
+  const badge=document.getElementById('entryCalBadge');
+  badge.textContent=cal?.name||''; badge.style.background=cal?.color||'var(--cal-accent)';
+
+  const noteEl=document.getElementById('noteInput');
+  noteEl.value=entry.note||'';
+  noteEl.className='note-input f1';
+
+  buildCarousel();
+
+  document.getElementById('calScreen').classList.remove('active');
+  document.getElementById('entryScreen').classList.add('active');
+  document.querySelector('.tab-bar').style.display='none';
+  window.scrollTo(0,0);
+}
+
+function goBack(){
+  document.getElementById('entryScreen').classList.remove('active');
+  document.getElementById('calScreen').classList.add('active');
+  document.querySelector('.tab-bar').style.display='';
+  renderCalendar();
+}
+
+// ── CAROUSEL ─────────────────────────────────────────
+function buildCarousel(){
+  const wrap=document.getElementById('carouselWrap');
+  const track=document.getElementById('carouselTrack');
+  track.innerHTML='';
+
+  if(!entryPhotos.length){
+    wrap.classList.add('empty-state');
+    track.innerHTML=`<div class="carousel-slide"><div class="carousel-empty" onclick="document.getElementById('photoInput').click()"><span class="icon">🖼</span><span>點擊上傳照片</span></div></div>`;
+    document.getElementById('photoStrip').innerHTML=buildStripHTML();
+    // Remove old arrows/dots/badges
+    wrap.querySelectorAll('.carousel-arrow,.carousel-dots,.fav-btn,.photo-count-badge').forEach(e=>e.remove());
+    return;
+  }
+
+  wrap.classList.remove('empty-state');
+  entryPhotos.forEach((photo,idx)=>{
+    const slide=document.createElement('div');
+    slide.className='carousel-slide';
+    slide.innerHTML=`<img class="slide-img" src="${photo.dataUrl}" draggable="false">`;
+    track.appendChild(slide);
+  });
+
+  // Position
+  track.style.transform=`translateX(-${activeSlideIdx*100}%)`;
+
+  // Remove old chrome
+  wrap.querySelectorAll('.carousel-arrow,.carousel-dots,.fav-btn,.photo-count-badge').forEach(e=>e.remove());
+
+  // Arrows
+  if(entryPhotos.length>1){
+    const la=document.createElement('button');la.className='carousel-arrow left';la.textContent='‹';la.onclick=()=>slideCarousel(-1);
+    const ra=document.createElement('button');ra.className='carousel-arrow right';ra.textContent='›';ra.onclick=()=>slideCarousel(1);
+    wrap.appendChild(la); wrap.appendChild(ra);
+
+    // Dots
+    const dots=document.createElement('div');dots.className='carousel-dots';
+    entryPhotos.forEach((_,i)=>{const d=document.createElement('div');d.className='c-dot'+(i===activeSlideIdx?' active':'');dots.appendChild(d)});
+    wrap.appendChild(dots);
+
+    // Count badge
+    const cnt=document.createElement('div');cnt.className='photo-count-badge';cnt.id='photoCountBadge';cnt.textContent=`${activeSlideIdx+1}/${entryPhotos.length}`;
+    wrap.appendChild(cnt);
+  }
+
+  // Fav button
+  const fav=document.createElement('button');fav.className='fav-btn'+(entryPhotos[activeSlideIdx]?.isFavorite?' fav-on':'');fav.id='favBtn';
+  fav.innerHTML=`<span class="fav-icon">${entryPhotos[activeSlideIdx]?.isFavorite?'❤️':'🤍'}</span>`;
+  fav.onclick=()=>toggleFavorite();
+  wrap.appendChild(fav);
+
+  // Touch swipe
+  setupSwipe(wrap);
+
+  // Thumbnail strip
+  document.getElementById('photoStrip').innerHTML=buildStripHTML();
+  updatePhotoCountLabel();
+}
+
+function slideCarousel(dir){
+  const n=entryPhotos.length;
+  activeSlideIdx=(activeSlideIdx+dir+n)%n;
+  updateCarouselUI();
+}
+
+function goToSlide(idx){
+  activeSlideIdx=idx;
+  updateCarouselUI();
+}
+
+function updateCarouselUI(){
+  const track=document.getElementById('carouselTrack');
+  track.style.transform=`translateX(-${activeSlideIdx*100}%)`;
+  // Dots
+  document.querySelectorAll('.c-dot').forEach((d,i)=>d.classList.toggle('active',i===activeSlideIdx));
+  // Count badge
+  const cnt=document.getElementById('photoCountBadge');
+  if(cnt) cnt.textContent=`${activeSlideIdx+1}/${entryPhotos.length}`;
+  // Fav
+  const fav=document.getElementById('favBtn');
+  if(fav){
+    const isFav=entryPhotos[activeSlideIdx]?.isFavorite;
+    fav.className='fav-btn'+(isFav?' fav-on':'');
+    fav.querySelector('.fav-icon').textContent=isFav?'❤️':'🤍';
+  }
+  // Strip
+  document.getElementById('photoStrip').innerHTML=buildStripHTML();
+  updatePhotoCountLabel();
+}
+
+const PHOTO_LIMIT = 10;
+
+function updatePhotoCountLabel(){
+  const label = document.getElementById('photoCountLabel');
+  if(!label) return;
+  const n = entryPhotos.length;
+  if(n === 0){ label.textContent=''; return; }
+  label.innerHTML = `<span>${n}</span> / ${PHOTO_LIMIT}`;
+}
+
+function buildStripHTML(){
+  const atLimit = entryPhotos.length >= PHOTO_LIMIT;
+  let html='';
+  entryPhotos.forEach((photo,idx)=>{
+    const favMark=photo.isFavorite?`<span class="strip-fav">❤️</span>`:'';
+    html+=`<div style="position:relative;flex-shrink:0" onclick="goToSlide(${idx})">
+      <img class="strip-thumb${idx===activeSlideIdx?' active-thumb':''}" src="${photo.dataUrl}">
+      ${favMark}
+      <div class="strip-del" onclick="event.stopPropagation();deletePhoto(${idx})" title="刪除照片">✕</div>
+    </div>`;
+  });
+  html+=`<div class="strip-thumb-add${atLimit?' hidden':''}" onclick="document.getElementById('photoInput').click()">＋</div>`;
+  return html;
+}
+
+function setupSwipe(wrap){
+  let startX=0, isDragging=false;
+  wrap.addEventListener('touchstart',e=>{startX=e.touches[0].clientX;isDragging=true},{passive:true});
+  wrap.addEventListener('touchmove',e=>{if(!isDragging||e.touches.length>1)return;e.preventDefault()},{passive:false});
+  wrap.addEventListener('touchend',e=>{
+    if(!isDragging)return; isDragging=false;
+    const dx=e.changedTouches[0].clientX-startX;
+    if(Math.abs(dx)>40&&entryPhotos.length>1) slideCarousel(dx<0?1:-1);
+  },{passive:true});
+}
+
+// ── FAVORITE SYSTEM ───────────────────────────────────
+function toggleFavorite(){
+  if(!entryPhotos[activeSlideIdx]) return;
+  entryPhotos[activeSlideIdx].isFavorite=!entryPhotos[activeSlideIdx].isFavorite;
+  const isFav=entryPhotos[activeSlideIdx].isFavorite;
+  const fav=document.getElementById('favBtn');
+  if(fav){
+    fav.className='fav-btn'+(isFav?' fav-on':'');
+    fav.querySelector('.fav-icon').textContent=isFav?'❤️':'🤍';
+    fav.classList.remove('beat'); void fav.offsetWidth; // reflow for re-trigger
+    fav.classList.add('beat');
+    setTimeout(()=>fav.classList.remove('beat'),500);
+  }
+  // Update strip
+  document.getElementById('photoStrip').innerHTML=buildStripHTML();
+  // Persist immediately
+  const key=dateKey(selectedDate.y,selectedDate.m,selectedDate.d);
+  if(!diary()[key]) diary()[key]={};
+  diary()[key].photos=entryPhotos.map(p=>({...p,stickers:p.stickers||[]}));
+  saveStore();
+  haptic();
+}
+
+// ── PHOTO COMPRESSION ────────────────────────────────
+// Resize & compress an image dataUrl to max 1200px wide, JPEG 0.75.
+// Keeps filesize ~100-250 KB — safe for IndexedDB and fast to render.
+function compressPhoto(dataUrl, callback){
+  const img = new Image();
+  img.onload = () => {
+    const MAX = 1200;
+    let w = img.naturalWidth, h = img.naturalHeight;
+    if(w > MAX){ h = Math.round(h * MAX / w); w = MAX; }
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    callback(c.toDataURL('image/jpeg', 0.75));
+  };
+  img.onerror = () => callback(dataUrl);   // fallback: keep original
+  img.src = dataUrl;
+}
+
+// ── MULTI PHOTO UPLOAD ────────────────────────────────
+function handleMultiPhotoUpload(e){
+  const files=Array.from(e.target.files); if(!files.length)return;
+  e.target.value='';
+
+  // Enforce limit
+  const slots = PHOTO_LIMIT - entryPhotos.length;
+  if(slots <= 0){ showToast(`已達上限 ${PHOTO_LIMIT} 張`); return; }
+  const allowed = files.slice(0, slots);
+  if(files.length > slots) showToast(`已達上限，僅加入前 ${slots} 張`);
+  else showToast('照片處理中…');
+
+  let loaded=0;
+  allowed.forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      compressPhoto(ev.target.result, compressed=>{
+        entryPhotos.push({id:'ph_'+Date.now()+'_'+Math.random().toString(36).slice(2),dataUrl:compressed,isFavorite:false,stickers:[]});
+        loaded++;
+        if(loaded===allowed.length){
+          activeSlideIdx=entryPhotos.length-1;
+          buildCarousel();
+        }
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+
+function persistEntryStickers(){
+  // Stickers removed — just keep photo array in sync with store
+  if(!selectedDate)return;
+  const key=dateKey(selectedDate.y,selectedDate.m,selectedDate.d);
+  if(!diary()[key])diary()[key]={};
+  diary()[key].photos=entryPhotos.map(p=>({...p,stickers:[]}));
+  saveStore();
+}
+
+// ── COMPOSITE THUMBNAIL (photo only — stickers removed) ──────────
+// Picks the favorited photo if one exists, else photo[0].
+// Renders a clean cover-fit JPEG at max 800px wide for the calendar grid.
+function flattenSlideToThumbnail(_, callback){
+  // Pick representative photo: first favorited, else first
+  const photo = entryPhotos.find(p => p.isFavorite) || entryPhotos[0];
+  if(!photo){ callback(null); return; }
+
+  const baseImg = new Image();
+  baseImg.onload = () => {
+    const NW = baseImg.naturalWidth  || 800;
+    const NH = baseImg.naturalHeight || 600;
+    const MAX = 800;
+    // Square thumbnail (matches day-cell aspect-ratio:1)
+    const outSz = Math.min(NW, NH, MAX);
+    const canvas = document.createElement('canvas');
+    canvas.width  = outSz;
+    canvas.height = outSz;
+    const ctx = canvas.getContext('2d');
+    // object-fit: cover — center-crop to square
+    const scale  = Math.max(outSz / NW, outSz / NH);
+    const drawW  = NW * scale;
+    const drawH  = NH * scale;
+    const offX   = (outSz - drawW) / 2;
+    const offY   = (outSz - drawH) / 2;
+    ctx.drawImage(baseImg, offX, offY, drawW, drawH);
+    try{ callback(canvas.toDataURL('image/jpeg', 0.88)); }
+    catch(e){ callback(photo.dataUrl); }
+  };
+  baseImg.onerror = () => callback(photo.dataUrl);
+  baseImg.src = photo.dataUrl;
+}
+// ── PHOTO DELETE (direct, no confirm) ────────────────
+function deletePhoto(idx){
+  if(idx < 0 || idx >= entryPhotos.length) return;
+  entryPhotos.splice(idx, 1);
+
+  if(entryPhotos.length === 0){
+    activeSlideIdx = 0;
+    // Check if entry is now completely empty (no note text either)
+    const note=(document.getElementById('noteInput')?.value||'').trim();
+    if(!note && selectedDate){
+      // Wipe the whole day entry and return to calendar
+      const key=dateKey(selectedDate.y,selectedDate.m,selectedDate.d);
+      delete diary()[key];
+      saveStore();
+      legoRecomputeMonth(selectedDate.y,selectedDate.m);
+      haptic();
+      showToast('紀錄已清空');
+      setTimeout(()=>goBack(), 400);
+      return;
+    }
+    // Has note but no photos — recompute lego unlock
+    if(selectedDate) legoRecomputeMonth(selectedDate.y,selectedDate.m);
+  } else if(activeSlideIdx >= entryPhotos.length){
+    activeSlideIdx = entryPhotos.length - 1;
+  }
+  buildCarousel();
+  haptic();
+}
+
+// ── SAVE ENTRY ────────────────────────────────────────
+function saveEntry(){
+  if(!selectedDate)return;
+  const key=dateKey(selectedDate.y,selectedDate.m,selectedDate.d);
+  if(!diary()[key])diary()[key]={};
+
+  const noteEl=document.getElementById('noteInput');
+  diary()[key].note=noteEl.value;
+  diary()[key].font='f1';
+  diary()[key].photos=entryPhotos.map(p=>({...p,stickers:[]}));
+
+  // 圖鑑收集判斷已移至 photoCountForMonth（純讀取比對 dateKey），
+  // 此處無需再寫入任何 flag。
+
+  // If all photos deleted, clear thumbnail and lego mark
+  if(!entryPhotos.length){
+    delete diary()[key].thumbnailUrl;
+    saveStore();
+    legoRecomputeMonth(selectedDate.y,selectedDate.m);
+    showToast('已儲存✓');
+    setTimeout(()=>goBack(),650);
+    return;
+  }
+
+  // Track lego point: mark this date as having a photo (for collection system)
+  legoMarkDate(selectedDate.y, selectedDate.m, selectedDate.d);
+
+  // Generate clean photo thumbnail (favored photo → cover-cropped square)
+  flattenSlideToThumbnail(0,(compositeUrl)=>{
+    if(compositeUrl) diary()[key].thumbnailUrl=compositeUrl;
+    saveStore();
+    showToast('已儲存 ✓');
+    setTimeout(()=>goBack(),650);
+  });
+}
+
+// ══════════════════════════════════════
+// STICKER CREATOR
+// ══════════════════════════════════════
+function handleStickerUpload(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{pendingStickerDataUrl=ev.target.result;document.getElementById('previewImg').src=ev.target.result;document.getElementById('previewArea').classList.add('show');applyPreviewShape()};
+  reader.readAsDataURL(file);e.target.value='';
+}
+function setShape(s){stickerShapeMode=s;document.getElementById('shapeCircle').classList.toggle('active',s==='circle');document.getElementById('shapeRect').classList.toggle('active',s==='rect');applyPreviewShape()}
+function applyPreviewShape(){const img=document.getElementById('previewImg');img.style.borderRadius=stickerShapeMode==='circle'?'50%':'16px';img.style.width='160px';img.style.height='160px';img.style.objectFit='cover'}
+function saveStickerToLibrary(){
+  if(!pendingStickerDataUrl){showToast('請先選取照片');return}
+  store.customStickers.push({id:'cs_'+Date.now(),dataUrl:pendingStickerDataUrl,shape:stickerShapeMode});
+  saveStore();
+  showToast('貼紙已加入庫 ✓');
+  pendingStickerDataUrl=null;document.getElementById('previewArea').classList.remove('show');renderMyStickers();
+}
+function updateStickerLimitBar(){}
+function renderMyStickers(){
+  const grid=document.getElementById('myStickersGrid'),sec=document.getElementById('myStickersSection');
+  grid.innerHTML='';
+  if(!store.customStickers.length){sec.style.display='none';return}
+  sec.style.display='';
+  store.customStickers.forEach(cs=>{
+    const item=document.createElement('div');item.className='my-sticker-item'+(cs.shape==='rect'?' rect':'');
+    const img=document.createElement('img');img.src=cs.dataUrl;
+    const del=document.createElement('div');del.className='del-sticker';del.textContent='✕';
+    del.onclick=e=>{e.stopPropagation();store.customStickers=store.customStickers.filter(c=>c.id!==cs.id);saveStore();renderMyStickers();buildCalCustomStickerStrip()};
+    item.appendChild(img);item.appendChild(del);grid.appendChild(item);
+  });
+}
+
+// ══════════════════════════════════════
+// TIME CAPSULE
+// ══════════════════════════════════════
+let capsuleUnlockType='date';
+let capsulePhotoDataUrl=null;
+
+function getTotalEntryCount(){
+  let count=0;
+  store.cals.forEach(c=>{
+    const entries=store.entries[c.id]||{};
+    Object.values(entries).forEach(e=>{if(e&&(e.note||e.photos?.length||e.photo))count++});
+  });
+  return count;
+}
+
+function isCapsuleUnlocked(cap){
+  if(cap.unlockType==='date'){
+    return new Date() >= new Date(cap.unlockDate);
+  }
+  if(cap.unlockType==='count'){
+    return getTotalEntryCount() >= (cap.unlockCount||50);
+  }
+  return false;
+}
+
+function capsuleCountdownText(cap){
+  if(cap.unlockType==='date'){
+    const diff=new Date(cap.unlockDate)-new Date();
+    if(diff<=0) return null; // already unlocked
+    const days=Math.ceil(diff/(1000*60*60*24));
+    return {days, label:`還有 ${days} 天開啟`};
+  }
+  if(cap.unlockType==='count'){
+    const cur=getTotalEntryCount();
+    const remain=(cap.unlockCount||50)-cur;
+    if(remain<=0) return null;
+    return {days:remain, label:`再寫 ${remain} 篇後開啟`};
+  }
+  return null;
+}
+
+const CAPSULE_LIMIT = 3;
+
+function renderCapsules(){
+  const body=document.getElementById('capsuleBody');
+  body.innerHTML='';
+  const caps=store.time_capsules||[];
+
+  // Create button — hidden when capsule limit reached
+  const createBtn=document.createElement('div');
+  createBtn.className='capsule-create-btn';
+  if(caps.length >= CAPSULE_LIMIT){
+    createBtn.style.cssText='opacity:.45;cursor:not-allowed;pointer-events:none;';
+    createBtn.innerHTML='🔒 &nbsp;膠囊空間已滿（最多 '+CAPSULE_LIMIT+' 則）';
+  } else {
+    createBtn.innerHTML='✉️ &nbsp;建立新的時光膠囊';
+    createBtn.onclick=openCapsuleForm;
+  }
+  body.appendChild(createBtn);
+
+  if(!caps.length){
+    const empty=document.createElement('div');
+    empty.className='capsule-empty';
+    empty.innerHTML=`<div class="capsule-empty-icon">🕰</div>寫下現在的故事<br>讓未來的自己驚喜`;
+    body.appendChild(empty);
+    return;
+  }
+
+  caps.forEach((cap,idx)=>{
+    const unlocked=isCapsuleUnlocked(cap);
+    const card=document.createElement('div');
+    card.className='capsule-card '+(unlocked?'unlocked':'sealed');
+
+    if(!unlocked){
+      // Sealed state
+      const cd=capsuleCountdownText(cap);
+      card.innerHTML=`
+        <div class="capsule-envelope">
+          <div class="capsule-env-glow"></div>
+          <div class="capsule-env-icon">💌</div>
+          <div class="capsule-countdown">
+            ${cd?`<strong>${cd.label}</strong>`:''} 
+          </div>
+          <div class="capsule-unlock-label">
+            ${cap.unlockType==='date'?`預計 ${cap.unlockDate} 開啟`:`累積 ${cap.unlockCount||50} 篇後開啟`}
+          </div>
+        </div>`;
+      card.onclick=()=>showSealedModal(cap);
+    } else {
+      // Unlocked state
+      const created=cap.createdAt?new Date(cap.createdAt).toLocaleDateString('zh-TW'):'';
+      const imgHtml=cap.photoDataUrl?`<img class="capsule-open-img" src="${cap.photoDataUrl}" alt="">`:'' ;
+      card.innerHTML=`
+        <div class="capsule-open-content">
+          <div class="capsule-unlock-badge">🔓 已開啟</div>
+          <div class="capsule-open-header">
+            <div class="capsule-open-icon">💌</div>
+            <div>
+              <div class="capsule-open-title">來自過去的自己</div>
+              <div class="capsule-open-date">寫於 ${created}</div>
+            </div>
+          </div>
+          ${imgHtml}
+          <div class="capsule-open-note">${(cap.note||'').replace(/\n/g,'<br>')}</div>
+        </div>`;
+      // Add delete button for unlocked
+      const delWrap=document.createElement('div');
+      delWrap.style.cssText='display:flex;justify-content:flex-end;padding:0 16px 14px';
+      const delBtn=document.createElement('button');
+      delBtn.style.cssText='background:none;border:none;font-family:\'Noto Sans TC\',sans-serif;font-size:11px;color:var(--muted);cursor:pointer;padding:4px 8px;border-radius:8px;transition:color .15s';
+      delBtn.textContent='刪除膠囊';
+      delBtn.onmouseenter=()=>delBtn.style.color='#e74c3c';
+      delBtn.onmouseleave=()=>delBtn.style.color='var(--muted)';
+      delBtn.onclick=(e)=>{e.stopPropagation();deleteCapsule(idx)};
+      delWrap.appendChild(delBtn);
+      card.appendChild(delWrap);
+    }
+    body.appendChild(card);
+  });
+}
+
+function openCapsuleForm(){
+  capsulePhotoDataUrl=null;
+  document.getElementById('capsuleNoteInput').value='';
+  document.getElementById('capsulePhotoPreview').style.display='none';
+  document.getElementById('capsulePhotoPlaceholder').style.display='';
+  document.getElementById('capsulePhotoInput').value='';
+  // Set default date to 1 year from today
+  const d=new Date(); d.setFullYear(d.getFullYear()+1);
+  document.getElementById('capsuleDateInput').value=d.toISOString().slice(0,10);
+  setCapsuleUnlockType('date');
+  // Update current count display
+  document.getElementById('capsuleCurrentCount').textContent=getTotalEntryCount();
+  document.getElementById('capsuleFormBg').classList.add('open');
+}
+
+function closeCapsuleForm(){
+  document.getElementById('capsuleFormBg').classList.remove('open');
+}
+
+function setCapsuleUnlockType(type){
+  capsuleUnlockType=type;
+  document.getElementById('capsuleOptDate').classList.toggle('active',type==='date');
+  document.getElementById('capsuleOptCount').classList.toggle('active',type==='count');
+  document.getElementById('capsuleDateField').style.display=type==='date'?'':'none';
+  document.getElementById('capsuleCountField').style.display=type==='count'?'':'none';
+}
+
+function handleCapsulePhoto(e){
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    capsulePhotoDataUrl=ev.target.result;
+    const preview=document.getElementById('capsulePhotoPreview');
+    preview.src=ev.target.result;
+    preview.style.display='block';
+    document.getElementById('capsulePhotoPlaceholder').style.display='none';
+  };
+  reader.readAsDataURL(file);
+  e.target.value='';
+}
+
+function saveCapsule(){
+  const note=document.getElementById('capsuleNoteInput').value.trim();
+  if(!note){showToast('請寫下你想說的話 ✏️');return}
+
+  // ── 膠囊上限檢查 ──
+  if(!store.time_capsules) store.time_capsules=[];
+  if(store.time_capsules.length >= CAPSULE_LIMIT){
+    showToast('膠囊空間已滿，最多只能建立 '+CAPSULE_LIMIT+' 則 🔒');
+    closeCapsuleForm();
+    return;
+  }
+
+  if(capsuleUnlockType==='date'){
+    const dateVal=document.getElementById('capsuleDateInput').value;
+    if(!dateVal){showToast('請選擇開啟日期');return}
+    if(new Date(dateVal)<=new Date()){showToast('開啟日期必須是未來的日期');return}
+  }
+
+  const cap={
+    id:'cap_'+Date.now(),
+    note,
+    photoDataUrl:capsulePhotoDataUrl||null,
+    unlockType:capsuleUnlockType,
+    unlockDate:capsuleUnlockType==='date'?document.getElementById('capsuleDateInput').value:null,
+    unlockCount:capsuleUnlockType==='count'?50:null,
+    createdAt:new Date().toISOString()
+  };
+
+  if(!store.time_capsules) store.time_capsules=[];
+  store.time_capsules.push(cap);
+  saveStore();
+  closeCapsuleForm();
+  renderCapsules();
+  showToast('膠囊已封存 ✉️');
+  haptic();
+}
+
+function deleteCapsule(idx){
+  store.time_capsules.splice(idx,1);
+  saveStore();
+  renderCapsules();
+  showToast('膠囊已刪除');
+}
+
+function showSealedModal(cap){
+  const cd=capsuleCountdownText(cap);
+  const sub=cd?
+    `${cd.label}，<br>屆時再回來看看吧。`:
+    '時機即將到來，請耐心等待。';
+  document.getElementById('capsuleSealedSubText').innerHTML=sub;
+  document.getElementById('capsuleSealedModal').classList.add('open');
+  haptic();
+}
+
+function closeSealedModal(){
+  document.getElementById('capsuleSealedModal').classList.remove('open');
+}
+
+// ══════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════
+function renderSettings(){
+  const s=store.settings;
+  document.getElementById('notifToggle').checked=!!s.notifOn;
+  document.getElementById('notifTime').value=s.notifTime||'21:00';
+  document.getElementById('notifTimeRow').style.display=s.notifOn?'flex':'none';
+  const t=s.theme||'warm';
+  ['warm','light','dark'].forEach(k=>document.getElementById('theme'+k[0].toUpperCase()+k.slice(1))?.classList.toggle('active',k===t));
+}
+function saveSettings(){
+  store.settings.notifOn=document.getElementById('notifToggle').checked;
+  store.settings.notifTime=document.getElementById('notifTime').value;
+  document.getElementById('notifTimeRow').style.display=store.settings.notifOn?'flex':'none';
+  saveStore();scheduleNotification();showToast('設定已儲存');
+}
+async function scheduleNotification(){
+  if(!store.settings.notifOn)return;
+  if(!('Notification' in window)){showToast('此瀏覽器不支援通知');return}
+  const p=await Notification.requestPermission();
+  if(p==='granted'){showToast('通知已開啟 · '+store.settings.notifTime);setupNotifChecker()}
+  else{showToast('請允許通知權限');document.getElementById('notifToggle').checked=false;store.settings.notifOn=false;saveStore()}
+}
+let notifCheckInterval=null;
+function setupNotifChecker(){
+  if(notifCheckInterval)clearInterval(notifCheckInterval);
+  if(!store.settings.notifOn)return;
+  notifCheckInterval=setInterval(()=>{
+    const now=new Date(),hhmm=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+    if(hhmm===store.settings.notifTime&&Notification.permission==='granted') new Notification('日記提醒 📔',{body:'今天有記錄你的生活嗎？'});
+  },60000);
+}
+
+// ══════════════════════════════════════
+// FUTURE GIFT — daily memory recall
+// ══════════════════════════════════════
+const HAPPY_KEYWORDS=['開心','快樂','好美','喜歡','買了','好吃','感動','幸福','溫暖','好棒','太美','超喜歡','難忘','驚喜','好笑','滿足','愛','珍惜','美好','享受','輕鬆','自在'];
+
+let _giftEntry=null; // {y,m,d,entry} of the memory shown
+
+function todayStr(){
+  return new Date().toISOString().slice(0,10);
+}
+
+function daysBetween(d1,d2){
+  return Math.round(Math.abs(d2-d1)/(1000*60*60*24));
+}
+
+// Collect all entries across all cals that have a photo
+function allPhotoEntries(){
+  const result=[];
+  store.cals.forEach(c=>{
+    const entries=store.entries[c.id]||{};
+    Object.entries(entries).forEach(([key,e])=>{
+      if(!e) return;
+      const hasPhoto=e.photos?.length||e.photo||e.thumbnailUrl;
+      if(!hasPhoto) return;
+      const parts=key.split('-');
+      if(parts.length!==3) return;
+      result.push({y:+parts[0],m:+parts[1],d:+parts[2],key,entry:e});
+    });
+  });
+  return result;
+}
+
+// Score entry for "happy" based on keywords in note
+function happinessScore(entry){
+  const note=(entry.note||'').toLowerCase();
+  return HAPPY_KEYWORDS.reduce((acc,kw)=>acc+(note.includes(kw)?1:0),0);
+}
+
+// 回憶回顧：每 50 天顯示一次，內容固定為「去年今天」
+const GIFT_INTERVAL_DAYS = 50;
+
+// 距離上次顯示是否已滿 50 天（或從未顯示過）
+function giftDueToday(){
+  const last=store.gift_seen?.['__last_shown__'];
+  if(!last) return true;
+  return daysBetween(new Date(last), new Date()) >= GIFT_INTERVAL_DAYS;
+}
+
+function markGiftShown(){
+  if(!store.gift_seen) store.gift_seen={};
+  store.gift_seen['__last_shown__']=todayStr();
+  saveStore();
+}
+
+function pickGiftEntry(){
+  const now=new Date();
+  const lastYear=now.getFullYear()-1;
+  const thisMonth=now.getMonth();   // 0-indexed，與 dateKey 一致
+  const thisDay=now.getDate();
+
+  // 只找去年今天這一筆（跨所有日記本）
+  const allEntries=allPhotoEntries();
+  const match=allEntries.find(({y,m,d})=>y===lastYear && m===thisMonth && d===thisDay);
+  if(!match) return null;
+  return {item:match, reason:'last_year_today'};
+}
+
+function buildGiftMessage(item,reason){
+  const {y,m,d,entry}=item;
+  const note=(entry.note||'').trim();
+  const snippet=note?extractSnippet(note,28):'';
+  const snipHtml=snippet?`，留下了「${snippet}」`:'' ;
+  return {
+    tag:'🗓 去年的今天',
+    headline:`去年的今天${snipHtml}，還記得那天的心情嗎？`
+  };
+}
+
+function extractSnippet(note,maxLen){
+  // Try to find sentence near a happy keyword
+  for(const kw of HAPPY_KEYWORDS){
+    const idx=note.indexOf(kw);
+    if(idx>=0){
+      const start=Math.max(0,idx-6);
+      const raw=note.slice(start,start+maxLen);
+      return raw.replace(/\n/g,' ').trim();
+    }
+  }
+  return note.slice(0,maxLen).replace(/\n/g,' ').trim();
+}
+
+function findFirstKeyword(note){
+  for(const kw of HAPPY_KEYWORDS){
+    if(note.includes(kw)) return kw;
+  }
+  return null;
+}
+
+async function checkAndShowGift(){
+  if(!giftDueToday()) return;  // 尚未滿 50 天，跳過
+  await new Promise(r=>setTimeout(r,900));
+
+  const result=pickGiftEntry();
+  if(!result) return;
+
+  const {item,reason}=result;
+  const {y,m,d,entry,key}=item;
+
+  _giftEntry={y,m,d,entry};
+
+  const {tag,headline}=buildGiftMessage(item,reason);
+
+  // Populate UI
+  document.getElementById('giftTag').innerHTML=`${tag}`;
+  document.getElementById('giftHeadline').textContent=headline;
+
+  // Photo
+  const photoUrl=entry.thumbnailUrl||entry.photos?.[0]?.dataUrl||entry.photo||null;
+  const photoSection=document.getElementById('giftPhotoSection');
+  if(photoUrl){
+    document.getElementById('giftPhoto').src=photoUrl;
+    const daysAgo=daysBetween(new Date(y,m,d),new Date());
+    document.getElementById('giftDaysBadge').textContent=
+      daysAgo<365?`${daysAgo} 天前`:`${Math.round(daysAgo/365)} 年前`;
+    photoSection.style.display='';
+  } else {
+    photoSection.style.display='none';
+  }
+
+  // Note excerpt
+  const noteSection=document.getElementById('giftNoteSection');
+  const note=(entry.note||'').trim();
+  if(note){
+    const excerpt=note.length>80?note.slice(0,80)+'…':note;
+    noteSection.innerHTML=`<div class="gift-note">「${excerpt.replace(/\n/g,'<br>')}」</div>`;
+  } else {
+    noteSection.innerHTML='<div class="gift-note-empty">那天沒有留下文字，但記憶已在這裡。</div>';
+  }
+
+  // Show
+  document.getElementById('giftOverlay').classList.add('open');
+  markGiftShown();
+  haptic();
+}
+
+function closeGift(){
+  document.getElementById('giftOverlay').classList.remove('open');
+  _giftEntry=null;
+}
+
+function revisitGift(){
+  if(!_giftEntry) return;
+  const {y,m,d}=_giftEntry;
+  closeGift();
+  // Switch to calendar tab then open entry
+  switchTab('cal');
+  // Wait for screen to render
+  setTimeout(()=>{
+    currentYear=y; currentMonth=m;
+    renderCalendar();
+    setTimeout(()=>openEntry(y,m,d),200);
+  },100);
+}
+
+// ── UTILS ─────────────────────────────────────────────
+function haptic(){if(navigator.vibrate)navigator.vibrate(10)}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+
+// ══════════════════════════════════════
+// LEGO COLLECTION SYSTEM v3
+// Month-binding: each YYYY-M maps to one shape.
+// Unlock = that month has enough photos to fill the shape.
+// ══════════════════════════════════════
+
+// ── Shape pixel maps ─────────────────────────────────
+const LEGO_SHAPES = {
+  // 5×5 Heart
+  heart:[
+    [0,1,0,1,0],
+    [1,1,1,1,1],
+    [1,1,1,1,1],
+    [0,1,1,1,0],
+    [0,0,1,0,0],
+  ],
+
+  // 5x5 Battery
+  battery: [
+    [0, 0, 1, 0, 0],
+    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0],
+  ],
+
+  // 8×8 Coffee cup
+  coffee:[
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 1, 1, 0, 0],
+    [0, 1, 1, 1, 1, 1, 1, 0],
+    [0, 1, 1, 1, 1, 1, 0, 1],
+    [0, 1, 1, 1, 1, 1, 1, 0],
+    [0, 1, 1, 1, 1, 1, 0, 0],
+    [0, 0, 1, 1, 1, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+  ],
+
+  // 7×7 Monster
+  monster:[
+    [0,0,1,0,1,0,0],
+    [0,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1],
+    [0,0,1,1,1,0,0],
+    [0,0,1,1,1,0,0],
+    [0,0,1,0,1,0,0],
+    [0,1,1,0,1,1,0],
+  ],
+  // 8×8 Goat
+  goat:[
+    [0,1,0,0,0,0,1,0],
+    [0,1,0,0,0,0,1,0],
+    [1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1],
+    [0,1,1,1,1,1,1,0],
+    [0,0,1,1,1,1,0,0],
+    [0,0,1,1,1,1,0,0],
+    [0,0,0,1,1,0,0,0],
+  ],
+  // 8x8 Puzzle piece
+  puzzle:[
+    [0,0,0,0,0,0,0,0],
+    [0,1,1,0,0,1,1,0],
+    [1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,0],
+    [0,1,1,1,1,1,1,0],
+    [0,1,1,0,0,1,1,0],
+    [0,0,0,0,0,0,0,0],
+  ],
+  // 7×7 Cookie
+  cookie:[
+    [0,0,1,1,1,0,0],
+    [0,1,1,1,0,1,0],
+    [1,1,1,0,1,1,1],
+    [1,1,1,1,1,1,1],
+    [1,1,1,1,0,1,1],
+    [0,1,1,1,1,1,0],
+    [0,0,1,1,1,0,0],
+  ],
+
+  // 6×6 Morning Glory
+  glory:[
+    [0,1,1,1,1,0],
+    [1,0,1,1,0,1],
+    [1,1,0,0,1,1],
+    [1,1,0,0,1,1],
+    [1,0,1,1,0,1],
+    [0,1,1,1,1,0],
+  ],
+  // 7×7 Dumbbel
+  dumbbel:[
+    [0,0,0,0,0,0,0],
+    [0,1,0,0,0,1,0],
+    [1,1,0,0,0,1,1],
+    [1,1,1,1,1,1,1],
+    [1,1,0,0,0,1,1],
+    [0,1,0,0,0,1,0],
+    [0,0,0,0,0,0,0],
+  ],
+  // 8×8 Bow tie
+  bowtie:[
+    [0,1,1,0,0,1,1,0],
+    [0,1,1,1,1,1,1,0],
+    [0,1,1,1,1,1,1,0],
+    [0,1,1,0,0,1,1,0],
+    [0,0,0,1,1,0,0,0],
+    [0,0,1,0,0,1,0,0],
+    [1,1,0,0,0,0,1,1],
+  ],
+  // 8×6 Car
+  car:[
+    [0,0,1,1,1,1,0,0],
+    [0,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1],
+    [1,1,0,1,1,0,1,1],
+    [0,1,0,1,1,0,1,0],
+  ],
+  // 9×11 Full cat body
+  cat:[
+    [1,1,0,0,0,0,0,1,1],
+    [1,1,1,0,0,0,1,1,1],
+    [0,1,1,1,1,1,1,1,0],
+    [0,1,0,1,1,1,0,1,0],
+    [0,1,1,1,1,1,1,1,0],
+    [0,1,1,1,1,1,1,1,0],
+    [0,1,1,1,1,1,1,1,0],
+    [1,1,1,0,0,0,1,1,1],
+    [1,1,0,0,0,0,0,1,1],
+    [1,1,0,0,0,0,0,1,1],
+    [0,1,0,0,0,0,0,1,0],
+  ],
+  // 9×10 Dog body
+  dog:[
+    [1,1,0,0,0,0,0,1,0],
+    [1,1,0,0,0,0,0,1,1],
+    [0,1,1,1,1,1,1,1,1],
+    [0,1,0,1,1,1,0,1,0],
+    [0,1,1,1,1,1,1,1,0],
+    [0,1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1,1],
+    [1,0,1,0,0,0,1,0,1],
+    [1,0,1,0,0,0,1,0,1],
+    [0,0,1,0,0,0,1,0,0],
+  ],
+  // 9×9 Mt Fuji
+  fuji:[
+    [0,0,0,0,1,0,0,0,0],
+    [0,0,0,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,0,0],
+    [0,1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1,1],
+    [1,1,0,0,0,0,0,1,1],
+    [1,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1],
+  ],
+  // 9×9 Four-leaf clover
+  clover:[
+    [0,1,1,0,0,0,1,1,0],
+    [1,1,1,1,0,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1],
+    [0,1,1,1,1,1,1,1,0],
+    [0,0,1,1,1,1,1,0,0],
+    [0,1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,0,1,1,1,1],
+    [0,1,1,0,0,0,1,1,0],
+  ],
+  // 7×9 Cherry
+  cherry:[
+    [0,0,0,1,1,0,0],
+    [0,0,1,0,1,0,0],
+    [0,1,0,0,1,1,0],
+    [1,1,1,0,1,1,1],
+    [1,1,1,0,1,1,1],
+    [1,1,1,0,1,1,1],
+    [0,1,1,0,1,1,0],
+    [0,0,1,0,1,0,0],
+    [0,0,0,1,0,0,0],
+  ],
+  // 7×10 Tulip
+  tulip:[
+    [0,0,1,1,1,0,0],
+    [0,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1],
+    [0,1,1,1,1,1,0],
+    [0,0,1,1,1,0,0],
+    [0,0,0,1,0,0,0],
+    [0,0,0,1,0,0,0],
+    [0,0,1,1,1,0,0],
+    [0,1,1,1,1,1,0],
+  ],
+  // 11×14 Sailboat
+  sailboat:[
+    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 1, 1, 0, 0, 0, 0],
+    [0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+    [0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
+    [0, 0, 0, 0, 1, 1, 1, 1, 1, 0],
+    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+    [0, 0, 1, 1, 1, 1, 1, 1, 0, 0],
+    [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+],
+
+  // 11×9 City skyline
+  city:[
+    [0,1,0,0,1,0,0,1,0,1,0],
+    [0,1,0,1,1,0,0,1,0,1,0],
+    [1,1,0,1,1,1,0,1,1,1,0],
+    [1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,1,1,0,1,1,0,1,1,1],
+    [1,0,1,1,0,1,1,0,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1],
+  ],
+  // 9×10 Croissant
+  croissant:[
+    [0,1,1,1,1,1,1,0,0],
+    [1,1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1],
+    [0,1,1,1,1,1,1,1,1],
+    [0,0,1,1,1,1,1,1,1],
+    [0,0,0,1,1,1,1,1,1],
+    [0,0,0,0,1,1,1,1,0],
+    [0,0,0,0,0,1,1,0,0],
+    [0,0,0,0,0,0,1,0,0],
+  ],
+  // 13×13 Sakura
+  sakura:[
+    [0,0,1,1,0,1,0,1,1,0,0,0,0],
+    [0,1,1,1,1,1,1,1,1,1,0,0,0],
+    [1,1,1,1,0,1,1,1,0,1,1,0,0],
+    [1,1,1,0,0,0,1,0,0,0,1,1,0],
+    [0,1,0,0,1,0,1,0,1,0,0,1,1],
+    [1,1,0,0,0,1,1,1,0,0,0,1,1],
+    [0,1,1,1,1,1,1,1,1,1,1,1,0],
+    [1,1,0,0,0,1,1,1,0,0,0,1,1],
+    [0,1,0,0,1,0,1,0,1,0,0,1,1],
+    [1,1,1,0,0,0,1,0,0,0,1,1,0],
+    [1,1,1,1,0,1,1,1,0,1,1,0,0],
+    [0,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,0,1,0,1,1,0,0,0,0],
+  ],
+  // 19×11 World map
+  worldmap:[
+    [0,1,1,0,0,0,1,1,0,0,0,0,0,1,0,0,1,0,0],
+    [1,1,1,1,0,1,1,1,1,0,0,0,1,1,1,0,1,1,0],
+    [1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0,0],
+    [0,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,0,0],
+    [0,0,1,1,1,0,0,0,0,1,1,1,1,1,0,0,0,0,0],
+    [0,0,0,1,0,0,0,0,1,1,1,1,1,0,0,0,0,1,0],
+    [0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1],
+    [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1],
+    [0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  ],
+  // 15×17 Castle
+  castle:(()=>{
+    const R=17,C=15,g=[];
+    for(let r=0;r<R;r++) g.push(new Array(C).fill(0));
+    // Three top towers
+    [[0,2],[6,8],[12,14]].forEach(([a,b])=>{
+      for(let r=0;r<=2;r++) for(let c=a;c<=b;c++) g[r][c]=1;
+    });
+    // Full wall rows 3-9
+    for(let r=3;r<=9;r++) for(let c=0;c<C;c++) g[r][c]=1;
+    // Gate arch open rows 6-9
+    for(let r=6;r<=9;r++){g[r][6]=0;g[r][7]=0;g[r][8]=0;}
+    // Base rows 10-16
+    for(let r=10;r<=16;r++) for(let c=0;c<C;c++) g[r][c]=1;
+    // Gate tunnel rows 10-16
+    for(let r=10;r<=16;r++){g[r][6]=0;g[r][7]=0;g[r][8]=0;}
+    return g;
+  })(),
+};
+
+// ── Shape pool — ordered list for monthly assignment ──
+// Shapes assigned round-robin by calendar month index (year*12 + month).
+const SHAPE_POOL = [
+  'heart','battery','coffee','monster','goat','puzzle',
+  'cookie','glory','dumbbel','bowtie','car',
+  'cat','dog','fuji','clover','cherry','tulip',
+  'sailboat','city','croissant',
+  'sakura','worldmap','castle',
+];
+
+// Shape display name map
+const SHAPE_NAMES = {
+  heart:'愛心', battery:'電池', coffee:'咖啡杯', monster:'怪獸',
+  goat:'山羊', puzzle:'拼圖', cookie:'餅乾', glory:'牽牛花',
+  dumbbel:'啞鈴', bowtie:'蝴蝶結', car:'小車車',
+  cat:'貓全身', dog:'狗全身', fuji:'富士山', clover:'幸運草',
+  cherry:'櫻桃', tulip:'鬱金香', sailboat:'帆船',
+  city:'城市輪廓', croissant:'牛角麵包',
+  sakura:'櫻花', worldmap:'世界地圖', castle:'城堡',
+};
+
+// ── Month key helpers ─────────────────────────────────
+// monthKey: "YYYY-M"  (e.g. "2026-3")
+function monthKey(y,m){ return y+'-'+m; }
+
+// Return the shape assigned to a calendar year+month (0-indexed month)
+function shapeForMonth(y,m){
+  const idx=(y*12+m) % SHAPE_POOL.length;
+  return SHAPE_POOL[idx];
+}
+
+// Count of brick slots in a shape
+function shapeBrickCount(shapeId){
+  const map=LEGO_SHAPES[shapeId]||[];
+  return map.flat().filter(v=>v===1).length;
+}
+
+// 今天的 dateKey，格式與 dateKey(y,m,d) 相同，例如 "2026-3-31"
+function todayDateKey(){
+  const t=new Date();
+  return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
+}
+
+// Count photos with photo data for a given year+month — scoped to currentCalId
+// 【圖鑑收集限制】只有當「日記日期 key === 系統當天 key」時才計入圖鑑。
+// 補記過去日期的照片僅顯示在日曆與紀錄清單，不計入本月圖鑑或年度圖鑑。
+function photoCountForMonth(y,m){
+  const tKey=todayDateKey(); // e.g. "2026-3-31"
+  let count=0;
+  const entries=store.entries[currentCalId]||{};
+  Object.keys(entries).forEach(key=>{
+    const [ky,km]=key.split('-').map(Number);
+    if(ky===y&&km===m){
+      const e=entries[key];
+      if(!e||(!(e.photos?.length||e.photo||e.thumbnailUrl))) return;
+      // 只有當此日記的日期 key 恰好等於今天，才計入圖鑑磚數
+      if(key===tKey) count++;
+    }
+  });
+  return count;
+}
+
+// Is a month's shape fully unlocked?
+function isMonthShapeUnlocked(y,m){
+  const shape=shapeForMonth(y,m);
+  const needed=shapeBrickCount(shape);
+  return photoCountForMonth(y,m)>=needed;
+}
+
+// ── Store: track which (shape, monthKey) are earned ───
+// store.lego_unlocked = { shapeId: { monthKey: true } }
+// Multiple months can earn the same shape (e.g. heart in Jan and Dec).
+// We store all so we can display any of them.
+
+function legoEnsureStore(){
+  if(!store.lego_unlocked) store.lego_unlocked={};
+}
+
+// Each diary has its own unlock namespace: store.lego_unlocked[calId+'_unlocked']
+function legoEnsureCalUnlocked(){
+  legoEnsureStore();
+  const k=currentCalId+'_unlocked';
+  if(!store.lego_unlocked[k]) store.lego_unlocked[k]={};
+}
+function calUnlocked(){ return store.lego_unlocked[currentCalId+'_unlocked']||{}; }
+
+// Called when an entry is saved/deleted — recompute unlock for that month
+function legoRecomputeMonth(y,m){
+  legoEnsureCalUnlocked();
+  const shape=shapeForMonth(y,m);
+  const mk=monthKey(y,m);
+  const cu=store.lego_unlocked[currentCalId+'_unlocked'];
+  if(!cu[shape]) cu[shape]={};
+  if(isMonthShapeUnlocked(y,m)){
+    cu[shape][mk]=true;
+  } else {
+    delete cu[shape][mk];
+    if(!Object.keys(cu[shape]).length)
+      delete cu[shape];
+  }
+  saveStore();
+}
+
+// Called at boot — scan all diary entries and sync unlock state for currentCalId
+function legoSyncFromDiary(){
+  legoEnsureStore();
+  // Collect all year-months that have entries in the current diary
+  const monthsSeen=new Set();
+  const entries=store.entries[currentCalId]||{};
+  Object.keys(entries).forEach(key=>{
+    const parts=key.split('-');
+    monthsSeen.add(parts[0]+'-'+parts[1]);
+  });
+  // Recompute each month
+  monthsSeen.forEach(mk=>{
+    const [ys,ms]=mk.split('-');
+    legoRecomputeMonth(parseInt(ys),parseInt(ms));
+  });
+  // Prune stale unlock records for this calId
+  const calUnlockKey = currentCalId+'_unlocked';
+  legoEnsureCalUnlocked();
+  const calUnlocked = store.lego_unlocked[calUnlockKey];
+  Object.keys(calUnlocked).forEach(shape=>{
+    Object.keys(calUnlocked[shape]||{}).forEach(mk=>{
+      const [ys,ms]=mk.split('-');
+      if(!isMonthShapeUnlocked(parseInt(ys),parseInt(ms))){
+        delete calUnlocked[shape][mk];
+      }
+    });
+    if(!Object.keys(calUnlocked[shape]||{}).length)
+      delete calUnlocked[shape];
+  });
+  saveStore();
+}
+
+// Legacy compat — kept so existing calls don't break
+function legoMarkDate(y,m,d){
+  legoRecomputeMonth(y,m);
+}
+function legoGetAllDates(){
+  // Return sorted date keys that have photos — scoped to currentCalId
+  const keys=new Set();
+  const entries=store.entries[currentCalId]||{};
+  Object.keys(entries).forEach(key=>{
+    const e=entries[key];
+    if(e&&(e.photos?.length||e.photo||e.thumbnailUrl)) keys.add(key);
+  });
+  return [...keys].sort();
+}
+function legoCountTotal(){ return legoGetAllDates().length; }
+
+function legoThumbForKey(key){
+  const e=store.entries[currentCalId]?.[key];
+  if(e){ const t=e.thumbnailUrl||e.photos?.[0]?.dataUrl||e.photo||null; if(t) return t; }
+  return null;
+}
+
+function legoMonthShape(m){ return shapeForMonth(new Date().getFullYear(),m); }
+
+// Favorite-first keys for a month — scoped to currentCalId
+// 【圖鑑收集限制】磚塊只填入「日記日期 key === 系統當天 key」的照片。
+function legoMonthKeysFavFirst(year,month){
+  const tKey=todayDateKey();
+  const favKeys=[],normalKeys=[];
+  const entries=store.entries[currentCalId]||{};
+  Object.keys(entries).forEach(key=>{
+    const [ky,km]=key.split('-').map(Number);
+    if(ky!==year||km!==month) return;
+    const e=entries[key];
+    if(!e||(!(e.photos?.length||e.photo||e.thumbnailUrl))) return;
+    // 只有當天記錄才能填入圖鑑磚塊
+    if(key!==tKey) return;
+    if((e.photos||[]).some(p=>p.isFavorite)) favKeys.push(key);
+    else normalKeys.push(key);
+  });
+  for(let i=normalKeys.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [normalKeys[i],normalKeys[j]]=[normalKeys[j],normalKeys[i]];
+  }
+  return [...favKeys,...normalKeys];
+}
+
+// ── Annual Hall render — 3×N grid ─────────────────────
+// Each cell = one shape. Unlocked if store.lego_unlocked[shape] has any month.
+// Clicking unlocked cell opens that month's canvas.
+function renderCollection(){
+  const body=document.getElementById('collectionBody');
+  body.innerHTML='';
+  legoSyncFromDiary();
+
+  const hall=document.createElement('div');
+  hall.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:7px;';
+  body.appendChild(hall);
+
+  // ── Uniform canvas size calculation ──────────────────
+  const vw = Math.min(window.innerWidth, 430);
+  const cellW = Math.floor((vw - 20 - 14) / 3);
+  const LABEL_H = 28;
+  const CANVAS_PX = cellW - 12;
+
+  SHAPE_POOL.forEach((shapeId,ti)=>{
+    const shapeMap=LEGO_SHAPES[shapeId]||[];
+    if(!shapeMap.length) return;
+
+    // A shape is unlocked if any month has completed it — scoped to currentCalId
+    const cu=calUnlocked();
+    const unlockedMonths=Object.keys(cu[shapeId]||{});
+    const unlocked=unlockedMonths.length>0;
+
+    // ── Outer cell wrapper ──────────────────────────────
+    const cell=document.createElement('div');
+    cell.style.cssText=
+      'display:flex;flex-direction:column;align-items:center;'+
+      'background:var(--bg2);border:1.5px solid '+(unlocked?'var(--cal-accent)':'var(--border)')+';'+
+      'border-radius:12px;overflow:hidden;'+
+      'width:'+cellW+'px;box-sizing:border-box;'+
+      'cursor:'+(unlocked?'pointer':'default')+';'+
+      'animation:fadeUp .3s ease both;transition:box-shadow .18s,transform .18s;';
+    cell.style.animationDelay=ti*20+'ms';
+
+    if(unlocked){
+      const latestMk=unlockedMonths.sort().reverse()[0];
+      const [ly,lm]=latestMk.split('-').map(Number);
+      cell.onclick=()=>openLegoCanvasForMonth(shapeId,ly,lm);
+      cell.addEventListener('mouseenter',()=>{cell.style.transform='translateY(-2px)';cell.style.boxShadow='0 6px 18px var(--shadow2)'});
+      cell.addEventListener('mouseleave',()=>{cell.style.transform='';cell.style.boxShadow=''});
+    }
+
+    // ── Canvas area: square container, holds pixel plate centred ──
+    const canvasBox=document.createElement('div');
+    canvasBox.style.cssText=
+      'width:'+cellW+'px;height:'+cellW+'px;flex-shrink:0;'+
+      'display:flex;align-items:center;justify-content:center;'+
+      'padding:6px;box-sizing:border-box;';
+
+    // ── Pixel plate preview (uniform canvas) ─────────────
+    const rows=shapeMap.length, cols=shapeMap[0].length;
+    const bs=Math.max(2,Math.floor(Math.min(CANVAS_PX/cols, CANVAS_PX/rows)));
+
+    const plate=document.createElement('div');
+    plate.style.cssText=
+      'display:grid;'+
+      'grid-template-columns:repeat('+cols+','+bs+'px);'+
+      'gap:1px;padding:3px;border-radius:5px;flex-shrink:0;'+
+      (unlocked
+        ? 'background:linear-gradient(145deg,#c9a96e,#b8935a);box-shadow:0 2px 0 rgba(0,0,0,.3),0 3px 8px rgba(0,0,0,.18);'
+        : 'background:var(--bg3);');
+
+    shapeMap.forEach(row=>row.forEach(v=>{
+      const px=document.createElement('div');
+      px.style.cssText='width:'+bs+'px;height:'+bs+'px;border-radius:1px;';
+      if(v===0){
+        px.style.background='transparent';
+      } else {
+        px.style.background=unlocked?'var(--cal-accent)':'#b8b0a4';
+        if(unlocked) px.style.boxShadow='0 1px 0 rgba(0,0,0,.3)';
+      }
+      plate.appendChild(px);
+    }));
+    canvasBox.appendChild(plate);
+    cell.appendChild(canvasBox);
+
+    // ── Separator line ────────────────────────────────────
+    const sep=document.createElement('div');
+    sep.style.cssText=
+      'width:100%;height:1px;flex-shrink:0;'+
+      'background:'+(unlocked?'var(--cal-accent-soft)':'var(--border)')+';';
+    cell.appendChild(sep);
+
+    // ── Text container: fixed height, 100% width, centred ──
+    // Pure text only — strip any emoji, no day counts
+    const rawName=SHAPE_NAMES[shapeId]||shapeId;
+    const labelName=rawName.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{1F300}-\u{1F9FF}\u{FE00}-\u{FE0F}]/gu,'').trim();
+
+    const labelBox=document.createElement('div');
+    labelBox.style.cssText=
+      'width:100%;height:'+LABEL_H+'px;flex-shrink:0;'+
+      'display:flex;align-items:center;justify-content:center;'+
+      'padding:0 6px;box-sizing:border-box;';
+
+    const labelText=document.createElement('span');
+    labelText.style.cssText=
+      'font-family:"Noto Sans TC",sans-serif;font-size:10px;'+
+      'color:'+(unlocked?'var(--subtle)':'var(--muted)')+';'+
+      'font-weight:'+(unlocked?'500':'400')+';'+
+      'text-align:center;line-height:1;'+
+      'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+
+      'max-width:100%;display:block;';
+    labelText.textContent=labelName;
+
+    labelBox.appendChild(labelText);
+    cell.appendChild(labelBox);
+
+    hall.appendChild(cell);
+
+    // Confetti on first unlock
+    if(unlocked){
+      const ck='confetti_shown_v3_'+currentCalId+'_'+shapeId;
+      if(!store[ck]){ store[ck]=true; saveStore(); setTimeout(()=>launchConfetti(),400+ti*30); }
+    }
+  });
+}
+
+// ── Confetti ──────────────────────────────────────────
+function launchConfetti(){
+  const overlay=document.getElementById('confettiOverlay');
+  overlay.innerHTML=''; overlay.classList.add('active');
+  const colors=['#d4857a','#f7c59f','#8fa882','#7fa3b8','#c9a96e','#9b86bd','#7aabab','#f5c6cb'];
+  for(let i=0;i<90;i++){
+    const p=document.createElement('div');
+    p.className='confetti-piece';
+    p.style.left=Math.random()*100+'vw';
+    p.style.background=colors[Math.floor(Math.random()*colors.length)];
+    p.style.width=(6+Math.random()*8)+'px'; p.style.height=(6+Math.random()*10)+'px';
+    p.style.borderRadius=Math.random()>0.5?'50%':'2px';
+    p.style.animationDuration=(1.5+Math.random()*2.5)+'s';
+    p.style.animationDelay=(Math.random()*1.2)+'s';
+    overlay.appendChild(p);
+  }
+  setTimeout(()=>{overlay.classList.remove('active');overlay.innerHTML='';},5000);
+}
+
+// ── Open canvas for a specific month's shape ──────────
+function openLegoCanvasForMonth(shapeId,year,month){
+  const name=SHAPE_NAMES[shapeId]||shapeId;
+  const tierProxy={name:name, shapeName:{[shapeId]:name}, shape:shapeId};
+  const keys=legoMonthKeysFavFirst(year,month);
+  _buildLegoCanvas(tierProxy, shapeId, keys, false);
+}
+
+// ── 本月圖鑑 canvas (from calendar button) ───────────
+function openLegoMonthCanvas(){
+  const y=currentYear, m=currentMonth;
+  const shape=shapeForMonth(y,m);
+  const name=SHAPE_NAMES[shape]||shape;
+  const tierProxy={name:'本月圖鑑', shapeName:{[shape]:name}, shape};
+  _buildLegoCanvas(tierProxy, shape, legoMonthKeysFavFirst(y,m), true);
+}
+
+let _legoCanvasAnimTimeout=null;
+function _buildLegoCanvas(tier,shape,dateKeys,isProgress=false){
+  const shapeMap=LEGO_SHAPES[shape]||[];
+  const rows=shapeMap.length, cols=shapeMap[0]?.length||0;
+  if(!rows||!cols) return;
+
+  const canvas=document.getElementById('legoCanvas');
+  const grid=document.getElementById('legoGrid');
+  const progress=document.getElementById('legoProgress');
+  const title=document.getElementById('legoCanvasTitle');
+  grid.innerHTML='';
+
+  const vw=Math.min(window.innerWidth,430);
+  const maxW=vw-32, maxH=window.innerHeight-180;
+  const brickSize=Math.min(Math.floor(maxW/cols), Math.floor(maxH/rows), 42);
+  const gap=3;
+  grid.style.width=(cols*(brickSize+gap)-gap)+'px';
+  grid.style.height=(rows*(brickSize+gap)-gap)+'px';
+  grid.style.position='relative';
+
+  const brickPositions=[];
+  shapeMap.forEach((row,ri)=>row.forEach((v,ci)=>{if(v===1)brickPositions.push({ri,ci})}));
+  const totalBricks=brickPositions.length;
+  const filledCount=Math.min(dateKeys.length,totalBricks);
+
+  brickPositions.forEach(({ri,ci},idx)=>{
+    const filled=idx<filledCount;
+    const brick=document.createElement('div');
+    brick.className='lego-brick'+(filled?'':' empty-brick');
+    brick.style.cssText=
+      'left:'+(ci*(brickSize+gap))+'px;top:'+(ri*(brickSize+gap))+'px;'+
+      'width:'+brickSize+'px;height:'+brickSize+'px;position:absolute;';
+    if(filled){
+      const thumb=legoThumbForKey(dateKeys[idx]);
+      if(thumb){
+        const img=document.createElement('img');
+        img.src=thumb; img.draggable=false;
+        brick.appendChild(img);
+      }
+      brick.style.setProperty('--snap-rot',(Math.random()-.5)*25+'deg');
+      brick.style.opacity='0';
+      setTimeout(()=>{
+        brick.classList.add('snapping');
+        setTimeout(()=>{brick.classList.remove('snapping');brick.style.opacity='1';},460);
+      },idx*32+50);
+    }
+    grid.appendChild(brick);
+  });
+
+  const shapeName=tier.shapeName?.[shape]||tier.name||shape;
+  title.textContent=tier.name+(shapeName&&shapeName!==tier.name?' · '+shapeName:'');
+  progress.textContent=isProgress
+    ?'本月進度 '+filledCount+' / '+totalBricks+' 格'
+    :filledCount+' / '+totalBricks+' 磚已完成';
+  canvas.style.display='flex';
+  haptic();
+}
+
+function closeLegoCanvas(){
+  document.getElementById('legoCanvas').style.display='none';
+}
+
+// ── Boot init ─────────────────────────────────────────
+function legoBootInit(){
+  legoEnsureStore();
+  legoSyncFromDiary();
+}
+
+// ══════════════════════════════════════
+// INIT — async bootstrap: wait for IndexedDB before rendering
+// ══════════════════════════════════════
+(async function boot(){
+  await initStore();   // populates global `store`
+  legoBootInit();
+
+  const s=store.settings, t=s?.theme||'warm';
+  if(t!=='warm') document.documentElement.setAttribute('data-theme',t);
+  const cal=store.cals[0];
+  currentCalId=cal.id; applyAccent(cal.color);
+
+  // ── First-launch check ──────────────────────────────
+  const isFirst = !store.settings.is_first_launch_done;
+  if(isFirst){
+    // Show welcome screen; calScreen stays hidden until onboarding completes
+    document.getElementById('welcomeScreen').style.display='flex';
+    document.querySelector('.tab-bar').style.display='none';
+    // Pre-fill name if already set
+    const inp=document.getElementById('wlNameInput');
+    if(cal.name && cal.name!=='我的日記') inp.value=cal.name;
+    // Allow Enter key to submit
+    inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); completeOnboarding(); }});
+  } else {
+    // Normal boot — skip welcome screen
+    document.getElementById('welcomeScreen').style.display='none';
+    renderTabs(); renderCalendar();
+    if(s?.notifOn) setupNotifChecker();
+    document.getElementById('calScreen').style.opacity='0';
+    document.getElementById('calScreen').style.transition='opacity .3s';
+    requestAnimationFrame(()=>{ document.getElementById('calScreen').style.opacity='1'; });
+    checkAndShowGift();
+  }
+})();
+
+function completeOnboarding(){
+  const inp=document.getElementById('wlNameInput');
+  const name=(inp.value.trim()||'我的日記').slice(0,16);
+
+  // Persist journal name + mark onboarding done
+  store.cals[0].name=name;
+  store.settings.is_first_launch_done=true;
+  saveStore();
+
+  // Update tab label if already rendered
+  renderTabs();
+  renderCalendar();
+
+  const s=store.settings;
+  if(s?.notifOn) setupNotifChecker();
+
+  // Animate welcome screen out, then fade cal screen in
+  const ws=document.getElementById('welcomeScreen');
+  ws.classList.add('hiding');
+  document.querySelector('.tab-bar').style.display='';
+
+  setTimeout(()=>{
+    ws.style.display='none';
+    document.getElementById('calScreen').style.opacity='0';
+    document.getElementById('calScreen').style.transition='opacity .35s';
+    requestAnimationFrame(()=>{ document.getElementById('calScreen').style.opacity='1'; });
+    checkAndShowGift();
+  }, 480);
+}
+</script>
+</body>
+</html>
